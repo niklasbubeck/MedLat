@@ -74,6 +74,47 @@ class EmbeddingEMA(nn.Module):
             self.weight_update(num_tokens)   
 
 
+class ImplicitEmbedding(nn.Module):
+    """
+    Implicit embedding that can be used as a drop-in replacement for nn.Embedding.
+    Provides a small MLP to map coordinates to codebook vectors.
+    QINCode: https://arxiv.org/abs/2401.14732
+
+    Args:
+        num_codes: Number of codes in codebook
+        dim: Dimension of embedding
+        hidden_dim: Hidden dimension of MLP
+        num_layers: Number of layers of MLP
+    """
+    def __init__(self, num_codes, dim, hidden_dim=256, num_layers=3):
+        super().__init__()
+        self.num_codes = num_codes
+        self.dim = dim
+
+        # coords or latent code parameters
+        self.coords = nn.Parameter(torch.randn(num_codes, dim))
+
+        # small MLP: coords → code vectors
+        layers = []
+        in_dim = dim
+        for _ in range(num_layers - 1):
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            in_dim = hidden_dim
+        layers.append(nn.Linear(hidden_dim, dim))
+        self.mlp = nn.Sequential(*layers)
+
+    @property
+    def weight(self):
+        """Acts like nn.Embedding.weight: returns full codebook matrix."""
+        return self.mlp(self.coords)   # (n_e, e_dim)
+
+    def forward(self, indices):
+        """Acts like nn.Embedding(indices)."""
+        codes = self.weight                 # (n_e, e_dim)
+        return codes[indices]               # indexing works identically
+
+
 class Phi(nn.Conv2d):
     def __init__(self, embed_dim, quant_resi):
         ks = 3

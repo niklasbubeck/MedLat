@@ -59,6 +59,7 @@ There for you have different options to choose how to setup your Quantizer.
 
 _REGISTRY_PREFIX = "discrete.vq."
 
+@register_model("discrete.vq.model")
 class VQModel(nn.Module):
     def __init__(
         self,
