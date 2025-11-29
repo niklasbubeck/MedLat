@@ -81,27 +81,27 @@ class ImplicitEmbedding(nn.Module):
     QINCode: https://arxiv.org/abs/2401.14732
 
     Args:
-        num_codes: Number of codes in codebook
+        n_e: Number of codes in codebook
         dim: Dimension of embedding
         hidden_dim: Hidden dimension of MLP
         num_layers: Number of layers of MLP
     """
-    def __init__(self, num_codes, dim, hidden_dim=256, num_layers=3):
+    def __init__(self, n_e, e_dim, hidden_dim=256, num_layers=3):
         super().__init__()
-        self.num_codes = num_codes
-        self.dim = dim
+        self.n_e = n_e
+        self.e_dim = e_dim
 
         # coords or latent code parameters
-        self.coords = nn.Parameter(torch.randn(num_codes, dim))
+        self.coords = nn.Parameter(torch.randn(n_e, e_dim))
 
         # small MLP: coords → code vectors
         layers = []
-        in_dim = dim
+        in_dim = e_dim
         for _ in range(num_layers - 1):
             layers.append(nn.Linear(in_dim, hidden_dim))
             layers.append(nn.ReLU())
             in_dim = hidden_dim
-        layers.append(nn.Linear(hidden_dim, dim))
+        layers.append(nn.Linear(hidden_dim, e_dim))
         self.mlp = nn.Sequential(*layers)
 
     @property

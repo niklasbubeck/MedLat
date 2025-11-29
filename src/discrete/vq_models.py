@@ -9,53 +9,6 @@ from ..registry import register_model
 
 __all__ = ["VQModel", "VQModel_f4", "VQModel_f8", "VQModel_f16", "MSRQModel_f8", "ViTVQModel_Small", "ViTVQModel_Base", "ViTVQModel_Large", "LFQModel_f4"]
 
-"""
-For a versatile selection of Quantizers, please refer to: https://github.com/lucidrains/vector-quantize-pytorch
-You can define it using the OmegaConf setup when training from source and config files.
-"""
-
-"""
-The VQModel gives you a lot of flexibility in terms of quantizer choices, and the possibility to use scaling as introduced in VAR.
-There for you have different options to choose how to setup your Quantizer.
-
-1. Train full VAR style with residuals for the scaling and scaling features:
-    quantizer_cfg = {
-        "_target_": "src.models.first_stage.discrete.quantizer.EMAVectorQuantizerWithVAR",
-        "n_e": 8192,
-        "e_dim": 3,
-        "beta": 0.25,
-        "remap": None,
-        "v_patch_nums": (1, 2, 3, 4, 5, 6, 8, 10, 13, 16),
-        "quant_resi": 0.5,
-        "share_quant_resi": 4,
-        "using_znorm": False,
-    }
-
-    just define the quant_residual settings.
-
-2. Train full VAR style WITHOU THE RESIDUALS but still get the VAR scaling features:
-    quantizer_cfg = {
-        "_target_": "src.models.first_stage.discrete.quantizer.EMAVectorQuantizerWithVAR",
-        "n_e": 8192,
-        "e_dim": 3,
-        "beta": 0.25,
-        "remap": None,
-        "v_patch_nums": (1, 2, 3, 4, 5, 6, 8, 10, 13, 16),
-        "using_znorm": False,
-    }
-    dont define the quant_residual settings, NOW YOU CAN USE THE STANDARD VQVAE,VQGAN WEIGHTS AND STILL USE THE VAR SCALING FEATURES.
-
-3. Train standard VQVAE / VQGAN:
-    quantizer_cfg = {
-        "_target_": "src.models.first_stage.discrete.quantizer.EMAVectorQuantizer",
-        "n_e": 8192,
-        "e_dim": 3,
-        "beta": 0.25,
-        "remap": None,
-    }
-
-    just dont define any var settings. You will get no VAR scaling features and default to VQVAE / VQGAN.
-"""
 
 _REGISTRY_PREFIX = "discrete.vq."
 
@@ -201,7 +154,6 @@ def VQModel_f4(
         n_e=8192,
         e_dim=3,
         beta=0.25,
-        remap=None,
         use_ema=False,
         ema_decay=0.99,
         ema_eps=1e-5,
@@ -241,7 +193,6 @@ def VQModel_f4(
         n_e=n_e,
         e_dim=e_dim,
         beta=beta,
-        remap=remap,
         use_ema=use_ema,
         ema_decay=ema_decay,
         ema_eps=ema_eps

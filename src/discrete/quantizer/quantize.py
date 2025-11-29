@@ -5,14 +5,15 @@ import numpy as np
 from torch import einsum
 from einops import rearrange, reduce
 from functools import partial
-from typing import List, Union, Optional, Tuple, Sequence, Text, Mapping, Dict
+from itertools import zip_longest
+from typing import Any, List, Union, Optional, Tuple, Sequence, Text, Mapping, Dict
 import random
 from .modules import *
 from torch.amp import autocast
 from src.registry import register_model
 
 
-__all__ = ["VectorQuantizer", "GumbelQuantize", "VectorQuantizer2", "SimVQ", "ResidualQuantizer", "GroupedResidualVQ", "MultiScaleResidualQuantizer", "LookupFreeQuantizer"]
+__all__ = ["VectorQuantizer", "GumbelQuantize", "QINCoVectorQuantizer2", "VectorQuantizer2", "SimVQ", "ResidualQuantizer", "GroupedVQ", "MultiScaleResidualQuantizer", "LookupFreeQuantizer", "FiniteScalarQuantizer"]
 
 _REGISTRY_PREFIX = "discrete.quantizer."
 
@@ -60,14 +61,14 @@ class VectorQuantizer(nn.Module):
         z_flattened = z.view(-1, self.e_dim)
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
 
-        d = torch.sum(z_flattened ** 2, in_channels=1, keepdim=True) + \
-            torch.sum(self.embedding.weight**2, in_channels=1) - 2 * \
+        d = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + \
+            torch.sum(self.embedding.weight**2, dim=1) - 2 * \
             torch.matmul(z_flattened, self.embedding.weight.t())
 
         ## could possible replace this here
         # #\start...
         # find closest encodings
-        min_encoding_indices = torch.argmin(d, in_channels=1).unsqueeze(1)
+        min_encoding_indices = torch.argmin(d, dim=1).unsqueeze(1)
 
         min_encodings = torch.zeros(
             min_encoding_indices.shape[0], self.n_e).to(z)
@@ -94,7 +95,7 @@ class VectorQuantizer(nn.Module):
             z_q = z + (z_q - z).detach()
 
         # perplexity
-        e_mean = torch.mean(min_encodings, in_channels=0)
+        e_mean = torch.mean(min_encodings, dim=0)
         perplexity = torch.exp(-torch.sum(e_mean * torch.log(e_mean + 1e-10)))
 
         # reshape back to match original input shape
@@ -207,7 +208,7 @@ class GumbelQuantize(nn.Module):
 
         # + kl divergence to the prior loss
         qy = F.softmax(logits, in_channels=1)
-        diff = self.kl_weight * torch.sum(qy * torch.log(qy * self.n_embed + 1e-10), in_channels=1).mean()
+        diff = self.kl_weight * torch.sum(qy * torch.log(qy * self.n_embed + 1e-10), dim=1).mean()
 
         ind = soft_one_hot.argmax(in_channels=1)
         if self.remap is not None:
@@ -252,13 +253,13 @@ class VectorQuantizer2(nn.Module):
         ema_decay: EMA decay rate
         ema_eps: Epsilon value for numerical stability
     """
-    def __init__(self, n_e, e_dim, beta,
+    def __init__(self, n_e, e_dim, beta=0.25,
                  legacy=True, rotation_trick: bool = False, 
                  use_norm=False, use_ema=False, ema_decay=0.99, ema_eps=1e-5):
         super().__init__()
         self.n_e = n_e
         self.e_dim = e_dim
-        self.norm = lambda x: F.normalize(x, in_channels=-1) if use_norm else x
+        self.norm = lambda x: F.normalize(x, dim=-1) if use_norm else x
         self.beta = beta
         self.legacy = legacy
         self.rotation_trick = rotation_trick
@@ -289,11 +290,11 @@ class VectorQuantizer2(nn.Module):
         embedding = self.norm(self.embedding.weight)
 
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
-        d = torch.sum(z_flattened ** 2, in_channels=1, keepdim=True) + \
-            torch.sum(embedding**2, in_channels=1) - 2 * \
+        d = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + \
+            torch.sum(embedding**2, dim=1) - 2 * \
             torch.einsum('bd,dn->bn', z_flattened, rearrange(embedding, 'n d -> d n'))
 
-        min_encoding_indices = torch.argmin(d, in_channels=1)
+        min_encoding_indices = torch.argmin(d, dim=1)
         z_q = self.embedding(min_encoding_indices).view(z.shape)
         z_q, z = self.norm(z_q), self.norm(z)
         perplexity = None
@@ -303,7 +304,7 @@ class VectorQuantizer2(nn.Module):
         if self.use_ema:
             encodings = F.one_hot(min_encoding_indices, self.n_e).type(z.dtype)
             self.embedding.perform_ema_update(encodings, z_flattened, self.n_e)
-            avg_probs = torch.mean(encodings, in_channels=0)
+            avg_probs = torch.mean(encodings, dim=0)
             perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
 
         # compute loss for embedding
@@ -322,7 +323,7 @@ class VectorQuantizer2(nn.Module):
             z_q = z + (z_q - z).detach()
 
         # Reshape back to original spatial dimensions
-        z_q = z_q_flat.view(z.shape)
+        # z_q is already in the correct shape from line 297
         if z.ndim == 4:
             z_q = rearrange(z_q, 'b h w c -> b c h w').contiguous()
         elif z.ndim == 5:
@@ -346,16 +347,16 @@ code_url="https://github.com/facebookresearch/Qinco",
 paper_url="https://arxiv.org/abs/2401.14732",
 )
 class QINCoVectorQuantizer2(VectorQuantizer2):
-    def __init__(self, n_e, e_dim,
+    def __init__(self, n_e, e_dim, beta=0.25,
                  hidden_dim=256, num_layers=3,
                  **kwargs):
 
-        super().__init__(n_e, e_dim, **kwargs)
+        super().__init__(n_e, e_dim, beta=beta, **kwargs)
 
         # Replace table with implicit MLP
         self.embedding = ImplicitEmbedding(
-            num_codes=n_e,
-            in_channels=e_dim,
+            n_e=n_e,
+            e_dim=e_dim,
             hidden_dim=hidden_dim,
             num_layers=num_layers
         )
@@ -422,10 +423,11 @@ class SimVQ(nn.Module):
 
         # Compute distances: (z - e)^2 = z^2 + e^2 - 2 z.e
         with torch.no_grad():
-            d = torch.sum(z_flat ** 2, in_channels=1, keepdim=True) + \
-                torch.sum(codebook**2, in_channels=1) - 2 * torch.einsum('bd,nd->bn', z_flat, codebook)
-            indices = torch.argmin(d, in_channels=1)
+            d = torch.sum(z_flat ** 2, dim=1, keepdim=True) + \
+                torch.sum(codebook**2, dim=1) - 2 * torch.einsum('bd,nd->bn', z_flat, codebook)
+            indices = torch.argmin(d, dim=1)
 
+        
         # Get quantized vectors
         z_q_flat = codebook[indices]
 
@@ -486,6 +488,15 @@ class ResidualQuantizer(nn.Module):
             for q in self.levels[1:]:
                 q.embedding = shared
 
+    # VQ Model needs to know for quant_conv
+    @property
+    def e_dim(self):
+        return self.levels[0].e_dim
+
+    @property
+    def n_e(self):
+        return self.levels[0].n_e
+
     # ----------------------------------------------------------------------------------
     def forward(self, x: torch.Tensor):
         residual = x
@@ -542,97 +553,95 @@ class ResidualQuantizer(nn.Module):
 
 @register_model(f"{_REGISTRY_PREFIX}grouped_residual_quantizer",
     code_url="https://github.com/yangdongchao/AcademiCodec",
-    paper_url="https://arxiv.org/pdf/2305.02765",)
-class GroupedResidualVQ(nn.Module):
+    paper_url="https://arxiv.org/pdf/2305.02765",
+    description="Grouped VQ for improved efficiency original uses ResidualQuantizers!")
+class GroupedVQ(nn.Module):
+    """
+    Applies a quantizer independently on channel groups.
+    Each group gets its own quantizer instance (usually ResidualQuantizer).
+    """
     def __init__(
         self,
-        *,
+        quantizer_class: nn.Module,
         in_channels: int,
+        quantizer_kwargs_list: List[Dict],
         groups: int = 1,
-        accept_image_fmap: bool = False,
-        **residual_quantizer_kwargs
+        split_dim: int = 1,
     ):
         super().__init__()
         self.in_channels = in_channels
         self.groups = groups
-        assert (in_channels % groups) == 0, f"in_channels {in_channels} must be divisible by groups {groups}"
-        self.dim_per_group = in_channels // groups
-        self.accept_image_fmap = accept_image_fmap
+        self.split_dim = split_dim
 
-        # Build one ResidualQuantizer per group
-        self.rvqs = ModuleList([
-            ResidualQuantizer(
-                **residual_quantizer_kwargs,
-                quantizer_kwargs_list=residual_quantizer_kwargs['quantizer_kwargs_list']
-            )
-            for _ in range(groups)
+        assert in_channels % groups == 0, \
+            f"in_channels {in_channels} must be divisible by groups {groups}"
+        assert len(quantizer_kwargs_list) == groups, \
+            "One quantizer config per group required"
+
+        # Build one quantizer per group (usually ResidualQuantizer)
+        self.vqs = nn.ModuleList([
+            quantizer_class(**quantizer_kwargs_list[i])
+            for i in range(groups)
         ])
 
+        self.dim_per_group = in_channels // groups
+
+    # Optional helpers
     @property
-    def split_dim(self):
-        return 1 if self.accept_image_fmap else -1
+    def e_dim(self):
+        return self.vqs[0].levels[0].e_dim
+
+    @property
+    def n_e(self):
+        return self.vqs[0].levels[0].n_e
 
     @property
     def codebooks(self):
-        # Stack codebooks from all groups
-        return torch.stack([rvq.levels[0].embedding.weight for rvq in self.rvqs])
+        """Return codebooks from all groups (first level only)."""
+        return torch.stack([vq.levels[0].embedding.weight for vq in self.vqs])
 
-    def get_codes_from_indices(self, indices: List[torch.Tensor]):
+
+    # -------------------------------------------------------------------------
+    # Forward pass
+    # -------------------------------------------------------------------------
+    @autocast('cuda', enabled=False)
+    def forward(self, x: torch.Tensor):
         """
-        Retrieve all codes from each group given a list of indices per group.
+        Returns:
+            quantized:     (B, C, ...)
+            total_loss:    scalar loss
+            all_outputs:   tuple of:
+                - all_perplexities:  [groups][levels] or None
+                - all_quantized:     [groups][levels]
+                - all_indices:       [groups][levels][..]
         """
-        codes = tuple(rvq.get_codes_from_indices(idx) for rvq, idx in zip(self.rvqs, indices))
-        return torch.stack(codes)
 
-    def get_output_from_indices(self, indices: List[torch.Tensor]):
-        """
-        Reconstruct full feature vector from grouped indices.
-        """
-        outputs = tuple(rvq.get_output_from_indices(idx) for rvq, idx in zip(self.rvqs, indices))
-        return torch.cat(outputs, in_channels=self.split_dim)
+        # 1) Split channels into groups
+        x_groups = x.split(self.dim_per_group, dim=self.split_dim)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        indices: List[torch.Tensor] = None,
-        return_all_codes: bool = False,
-        sample_codebook_temp = None,
-        freeze_codebook: bool = False,
-        mask = None,
-    ):
-        split_dim = self.split_dim
-        assert x.shape[split_dim] == self.in_channels, f"Input in_channels {x.shape[split_dim]} != {self.in_channels}"
+        # 2) Apply VQ to each group independently
+        group_results = []
+        for group_x, vq in zip(x_groups, self.vqs):
+            q, loss, extras = vq(group_x)
+            group_results.append((q, loss, extras))
 
-        # Split input along feature dimension
-        x_chunks = x.chunk(self.groups, in_channels=split_dim)
-        indices = indices or [None] * self.groups
-        return_ce_loss = any(idx is not None for idx in indices)
+        # 3) Unpack results
+        quantized_list   = [r[0] for r in group_results]
+        losses_list      = [r[1] for r in group_results]
+        extras_list      = [r[2] for r in group_results]
 
-        forward_kwargs = dict(
-            return_all_codes=return_all_codes,
-            sample_codebook_temp=sample_codebook_temp,
-            mask=mask,
-            freeze_codebook=freeze_codebook
-        )
+        # 4) Concatenate quantized outputs across groups
+        quantized = torch.cat(quantized_list, dim=self.split_dim)
 
-        # Forward pass through each group
-        out = tuple(
-            rvq(chunk, indices=chunk_idx, **forward_kwargs)
-            for rvq, chunk, chunk_idx in zip_longest(self.rvqs, x_chunks, indices)
-        )
-        out = tuple(zip(*out))
+        # 5) Combine losses
+        total_loss = sum(losses_list)
 
-        if return_ce_loss:
-            quantized, ce_losses = out[:2]
-            return torch.cat(quantized, in_channels=split_dim), sum(ce_losses)
+        # 6) Stack metadata cleanly
+        all_perplexities  = [e[0] for e in extras_list]
+        all_quantized_lvls = [e[1] for e in extras_list]
+        all_indices       = [e[2] for e in extras_list]
 
-        # Otherwise, combine all outputs
-        quantized, all_indices, commit_losses, *maybe_all_codes = out
-        quantized = torch.cat(quantized, in_channels=split_dim)
-        all_indices = torch.stack(all_indices)
-        commit_losses = torch.stack(commit_losses)
-
-        return (quantized, all_indices, commit_losses, *maybe_all_codes)
+        return quantized, total_loss, (all_perplexities, all_quantized_lvls, all_indices)
 
 
 @register_model(f"{_REGISTRY_PREFIX}msrq_vector_quantizer2",
@@ -658,8 +667,8 @@ class MultiScaleResidualQuantizer(nn.Module):
         share_quant_resi: Number of quantizers to share
     """
     def __init__(
-        self, n_e: int, e_dim: int, using_znorm: bool = True, beta: float = 0.25, use_ema: bool = False, ema_decay: float = 0.99, ema_eps: float = 1e-5,
-        default_qresi_counts: int = 0, v_patch_nums: Tuple[int] = None, quant_resi: float = 0.5, share_quant_resi: int = 4,  # share_quant_resi: args.qsr
+        self, n_e: int, e_dim: int, using_znorm: bool = True, beta: float = 0.25, rotation_trick: bool = False, use_ema: bool = False, ema_decay: float = 0.99, ema_eps: float = 1e-5,
+        default_qresi_counts: int = 0, v_patch_nums: Tuple[int] = (1, 2, 3, 4, 5, 6, 8, 10, 13, 16), quant_resi: float = 0.5, share_quant_resi: int = 4,  # share_quant_resi: args.qsr
     ):
         super().__init__()
         self.n_e = n_e
@@ -667,7 +676,7 @@ class MultiScaleResidualQuantizer(nn.Module):
         self.using_znorm = using_znorm
         self.use_ema = use_ema
         self.v_patch_nums = v_patch_nums
-        
+        self.rotation_trick = rotation_trick
         self.quant_resi_ratio = quant_resi
         if share_quant_resi == 0:   # non-shared: \phi_{1 to K} for K scales
             self.quant_resi = PhiNonShared([(Phi(e_dim, quant_resi) if abs(quant_resi) > 1e-6 else nn.Identity()) for _ in range(default_qresi_counts or len(self.v_patch_nums))])
@@ -695,6 +704,7 @@ class MultiScaleResidualQuantizer(nn.Module):
     def extra_repr(self) -> str:
         return f'{self.v_patch_nums}, znorm={self.using_znorm}, beta={self.beta}  |  S={len(self.v_patch_nums)}, quant_resi={self.quant_resi_ratio}'
     
+    
     # ===================== `forward` is only used in VAE training =====================
     def forward(self, f_BChw):
         dtype = f_BChw.dtype
@@ -707,21 +717,21 @@ class MultiScaleResidualQuantizer(nn.Module):
         
         with torch.amp.autocast('cuda', enabled=False):
             mean_vq_loss: torch.Tensor = 0.0
-            vocab_hit_V = torch.zeros(self.n_embeddings, dtype=torch.float, device=f_BChw.device)
+            vocab_hit_V = torch.zeros(self.n_e, dtype=torch.float, device=f_BChw.device)
             SN = len(self.v_patch_nums)
             encoding_indices_list = []
             for si, pn in enumerate(self.v_patch_nums):
                 if self.using_znorm:
                     rest_NC = F.interpolate(f_rest, size=(pn, pn), mode='area').permute(0, 2, 3, 1).reshape(-1, C) if (si != SN-1) else f_rest.permute(0, 2, 3, 1).reshape(-1, C)
-                    rest_NC = F.normalize(rest_NC, in_channels=-1)
-                    idx_N = torch.argmax(rest_NC @ F.normalize(self.embedding.weight.data.T, in_channels=0), in_channels=1)
+                    rest_NC = F.normalize(rest_NC, dim=-1)
+                    idx_N = torch.argmax(rest_NC @ F.normalize(self.embedding.weight.data.T, dim=0), dim=1)
                 else:
                     rest_NC = F.interpolate(f_rest, size=(pn, pn), mode='area').permute(0, 2, 3, 1).reshape(-1, C) if (si != SN-1) else f_rest.permute(0, 2, 3, 1).reshape(-1, C)
-                    d_no_grad = torch.sum(rest_NC.square(), in_channels=1, keepdim=True) + torch.sum(self.embedding.weight.data.square(), in_channels=1, keepdim=False)
+                    d_no_grad = torch.sum(rest_NC.square(), dim=1, keepdim=True) + torch.sum(self.embedding.weight.data.square(), dim=1, keepdim=False)
                     d_no_grad.addmm_(rest_NC, self.embedding.weight.data.T, alpha=-2, beta=1)
-                    idx_N = torch.argmin(d_no_grad, in_channels=1)
+                    idx_N = torch.argmin(d_no_grad, dim=1)
                 
-                hit_V = idx_N.bincount(minlength=self.n_embeddings).float()
+                hit_V = idx_N.bincount(minlength=self.n_e).float()
                 encoding_indices_list.append(idx_N)
                 
                 idx_Bhw = idx_N.view(B, pn, pn)
@@ -745,8 +755,8 @@ class MultiScaleResidualQuantizer(nn.Module):
                 f_hat = (f_hat.data - f_no_grad).add_(f_BChw)
         
         # Calculate perplexity
-        encodings = F.one_hot(encoding_indices_list[-1], self.n_embeddings).type(f_BChw.dtype)
-        avg_probs = torch.mean(encodings, in_channels=0)
+        encodings = F.one_hot(encoding_indices_list[-1], self.n_e).type(f_BChw.dtype)
+        avg_probs = torch.mean(encodings, dim=0)
         perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
         
         # Return in the same format as other quantizers
@@ -798,12 +808,12 @@ class MultiScaleResidualQuantizer(nn.Module):
             # find the nearest embedding
             z_NC = F.interpolate(f_rest, size=(ph, pw), mode='area').permute(0, 2, 3, 1).reshape(-1, C) if (si != SN-1) else f_rest.permute(0, 2, 3, 1).reshape(-1, C)
             if self.using_znorm:
-                z_NC = F.normalize(z_NC, in_channels=-1)
-                idx_N = torch.argmax(z_NC @ F.normalize(self.embedding.weight.data.T, in_channels=0), in_channels=1)
+                z_NC = F.normalize(z_NC, dim=-1)
+                idx_N = torch.argmax(z_NC @ F.normalize(self.embedding.weight.data.T, dim=0), dim=1)
             else:
-                d_no_grad = torch.sum(z_NC.square(), in_channels=1, keepdim=True) + torch.sum(self.embedding.weight.data.square(), in_channels=1, keepdim=False)
+                d_no_grad = torch.sum(z_NC.square(), dim=1, keepdim=True) + torch.sum(self.embedding.weight.data.square(), dim=1, keepdim=False)
                 d_no_grad.addmm_(z_NC, self.embedding.weight.data.T, alpha=-2, beta=1)  # (B*h*w, n_e)
-                idx_N = torch.argmin(d_no_grad, in_channels=1)
+                idx_N = torch.argmin(d_no_grad, dim=1)
             
             idx_Bhw = idx_N.view(B, ph, pw)
             h_BChw = F.interpolate(self.embedding(idx_Bhw).permute(0, 3, 1, 2), size=(H, W), mode='bicubic').contiguous() if (si != SN-1) else self.embedding(idx_Bhw).permute(0, 3, 1, 2).contiguous()
@@ -833,7 +843,7 @@ class MultiScaleResidualQuantizer(nn.Module):
                 f_hat.add_(self.quant_resi[si/(SN-1)](h_BChw))
             pn_next = self.v_patch_nums[si+1]
             next_scales.append(F.interpolate(f_hat, size=(pn_next, pn_next), mode='area').view(B, C, -1).transpose(1, 2))
-        return torch.cat(next_scales, in_channels=1) if len(next_scales) else None
+        return torch.cat(next_scales, dim=1) if len(next_scales) else None
 
     def get_next_autoregressive_input(self, si: int, SN: int, f_hat: torch.Tensor, h_BChw: torch.Tensor) -> Tuple[Optional[torch.Tensor], torch.Tensor]:
         """Get next autoregressive input"""
@@ -864,7 +874,6 @@ class LookupFreeQuantizer(torch.nn.Module):
         entropy_loss_weight: float = 0.1,
         entropy_loss_temperature: float = 0.01,
         entropy_gamma: float = 1.0,
-        dims: int = 2
     ):
         """ 
         Args:
@@ -883,7 +892,6 @@ class LookupFreeQuantizer(torch.nn.Module):
         self.entropy_loss_weight = entropy_loss_weight
         self.entropy_loss_temperature = entropy_loss_temperature
         self.entropy_gamma = entropy_gamma
-        self.is_3d = dims == 3
 
         bits_to_indices = torch.pow(2.0, torch.arange(0, self.token_size, dtype=torch.float32))
         self.register_buffer('bits_to_indices', bits_to_indices.int())
@@ -891,6 +899,14 @@ class LookupFreeQuantizer(torch.nn.Module):
         all_codes = torch.arange(self.codebook_size)
         bits = ((all_codes[..., None].int() & self.bits_to_indices) != 0).float()
         self.register_buffer('codebook', bits * 2.0 - 1.0)
+
+    @property
+    def e_dim(self):
+        return self.token_size
+
+    @property
+    def n_e(self):
+        return self.codebook_size
 
         # Ensure quantization is performed using f32
     @autocast('cuda',enabled=False)
@@ -929,7 +945,7 @@ class LookupFreeQuantizer(torch.nn.Module):
         z_quantized = z + (z_quantized - z).detach()
 
         # Reshape back to original spatial dimensions
-        z_q = z_q_flat.view(z.shape)
+        z_q = z_quantized
         if z.ndim == 4:
             z_q = rearrange(z_q, 'b h w c -> b c h w').contiguous()
         elif z.ndim == 5:
@@ -945,7 +961,7 @@ class LookupFreeQuantizer(torch.nn.Module):
         )
 
         # return z_quantized, result_dict # Old return
-        return z_quantized, loss, (per_sample_entropy, None, min_encoding_indices) # We don't have one_hot encodings here
+        return z_q, loss, (per_sample_entropy, None, min_encoding_indices) # We don't have one_hot encodings here
 
     def get_codebook_entry(self, indices: torch.Tensor, shape=None) -> torch.Tensor:
         indices = indices.long()
@@ -961,3 +977,181 @@ class LookupFreeQuantizer(torch.nn.Module):
         indices = indices.long()
         return self.get_codebook_entry(indices)
     
+
+@register_model(f"{_REGISTRY_PREFIX}finite_scalar_quantizer",
+                paper_url="https://arxiv.org/pdf/2309.15505",)
+class FiniteScalarQuantizer(nn.Module):
+    """
+    Minimal Finite Scalar Quantizer compatible with your VQ wrappers.
+
+    Args:
+        levels: list of ints, number of quantization levels per scalar channel (length = code_dim)
+        dim: input feature dimension (channels). If different from code_dim, projections are used.
+        commitment_cost: optional float, weight for commitment loss (default 0.0).
+    """
+    def __init__(self, levels: List[int], dim: Optional[int] = None, commitment_cost: float = 0.0):
+        super().__init__()
+        assert isinstance(levels, (list, tuple)) and len(levels) > 0
+        self._levels = torch.tensor(list(levels), dtype=torch.int64)           # (d,)
+        self.code_dim = len(self._levels)                                     # d
+        self.codebook_size = int(int(torch.prod(self._levels).item()))        # n_e (product)
+        self.commitment_cost = float(commitment_cost)
+
+        # basis for mixed-radix (digits -> index)
+        basis = torch.cumprod(torch.cat((torch.tensor([1], dtype=torch.int64), self._levels[:-1].to(torch.int64))), dim=0)
+        self.register_buffer("_basis", basis)     # (d,)
+
+        # half widths and offsets (use simple formula)
+        # half_width = (L - 1) / 2
+        half_widths = (self._levels - 1).to(torch.float32) / 2.0   # (d,)
+        offsets = torch.where((self._levels % 2) == 0, 0.5, 0.0).to(torch.float32)
+        self.register_buffer("_half_widths", half_widths)
+        self.register_buffer("_offsets", offsets)
+
+        # projections if input dim != code_dim
+        self.in_dim = self.code_dim if dim is None else int(dim)
+        self.has_projections = (self.in_dim != self.code_dim)
+        if self.has_projections:
+            self.project_in = nn.Linear(self.in_dim, self.code_dim)
+            self.project_out = nn.Linear(self.code_dim, self.in_dim)
+        else:
+            self.project_in = nn.Identity()
+            self.project_out = nn.Identity()
+
+    @property
+    def e_dim(self):
+        return self.code_dim
+
+    @property
+    def n_e(self):
+        return self.codebook_size
+
+    # -------- helpers: mixed-radix index conversions ---------------------------
+    def codes_to_indices(self, codes: torch.Tensor) -> torch.Tensor:
+        """
+        codes: (..., d) integer-like or floats near integers representing digits in [0..L-1]
+        returns indices: (...) int64
+        """
+        device = codes.device
+        # ensure digits as integer long
+        digits = torch.round(codes).long()  # (..., d)
+        basis = self._basis.to(device)      # (d,)
+        idx = torch.sum(digits * basis.to(digits.device), dim=-1)
+        return idx
+
+    def indices_to_codes(self, indices: torch.Tensor) -> torch.Tensor:
+        """
+        indices: (...) int
+        returns codes: (..., d) in integer digit space [0..L-1] (float)
+        """
+        device = indices.device
+        indices = indices.long().unsqueeze(-1)   # (...,1)
+        basis = self._basis.to(device).unsqueeze(0)  # (1,d)
+        levels = self._levels.to(device).unsqueeze(0) # (1,d)
+        digits = (indices // basis) % levels      # (..., d)
+        return digits.to(torch.float32)
+
+    def get_codebook_entry(self, indices: torch.Tensor, shape: Optional[tuple] = None) -> torch.Tensor:
+        """
+        Return code vectors for given indices in normalized [-1, 1] per code-dim space.
+        shape: optional shape to view the returned codes (expects last dim = d)
+        """
+        digits = self.indices_to_codes(indices)  # (..., d)
+        # map digits to normalized [-1,1]: digit -> centered value then / half_width
+        half = self._half_widths.to(digits.device)
+        centered = digits - torch.floor(self._levels.to(digits.device).to(torch.float32) / 2.0)
+        normalized = centered / (half + 1e-12)
+        if shape is not None:
+            normalized = normalized.view(shape)
+        return normalized
+
+    # -------- bounding & quantization primitives --------------------------------
+    def _bound_and_round(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Simple bounding: map x -> roughly [-half_width..half_width] via tanh,
+        then round to integers. Return integer-like rounded digits in [-half..half].
+        x expected shape (..., d)
+        """
+        half = self._half_widths.to(x.device)        # (d,)
+        offsets = self._offsets.to(x.device)         # (d,)
+        # apply tanh-based soft bound then shift
+        bounded = torch.tanh(x) * half - offsets    # (..., d)
+        rounded = torch.round(bounded)              # integer-like
+        return rounded
+
+    # -------- forward ----------------------------------------------------------
+    def forward(self, z: torch.Tensor):
+        """
+        z: (B, C, H, W) or (B, C, D, H, W) or (..., in_dim)
+        returns: (z_q, loss, (perplexity, None, indices))
+        """
+        orig_ndim = z.ndim
+        z = z.float()
+
+        # bring to channel-last layout if image/video
+        if z.ndim == 4:   # (B, C, H, W)
+            z_cl = rearrange(z, 'b c h w -> b h w c').contiguous()
+        elif z.ndim == 5: # (B, C, D, H, W)
+            z_cl = rearrange(z, 'b c d h w -> b d h w c').contiguous()
+        else:
+            z_cl = z
+
+        shape_cl = z_cl.shape   # (..., in_dim)
+        assert shape_cl[-1] == self.in_dim, f"expected last dim {self.in_dim}, got {shape_cl[-1]}"
+
+        # project into code_dim
+        flat = z_cl.view(-1, shape_cl[-1])           # (N, in_dim)
+        proj = self.project_in(flat)                  # (N, d)
+
+        # bound & round in projection space
+        rounded = self._bound_and_round(proj)         # (N, d) integer-like in approx [-half..half]
+        # convert to digits in [0..L-1]
+        half = torch.floor(self._levels.to(rounded.device).to(torch.float32) / 2.0).to(rounded.dtype)
+        digits = (rounded + half)                     # (N, d)
+        levels = self._levels.to(digits.device).to(torch.float32)
+        mins = torch.zeros_like(levels)
+        maxs = levels - 1.0
+        digits_clamped = torch.clamp(digits, min=mins, max=maxs)
+        # compute mixed-radix indices
+        indices_flat = torch.sum(digits_clamped.long() * self._basis.to(digits_clamped.device), dim=-1)  # (N,)
+
+        # commitment loss (pull proj towards quantized normalized representation)
+        # normalized quantized in [-1,1]
+        normalized = (rounded / (half + 1e-12)).to(proj.dtype)   # (N, d)
+        commitment_loss = torch.tensor(0.0, device=z.device)
+        if self.commitment_cost != 0.0:
+            commitment_loss = self.commitment_cost * F.mse_loss(proj.detach(), normalized)
+
+        # reconstruct quantized in input space
+        q_proj = normalized                               # (N, d)
+        q_out_flat = self.project_out(q_proj)             # (N, in_dim)
+        # shape back
+        q_out_cl = q_out_flat.view(*shape_cl)
+        if orig_ndim == 4:
+            z_q = rearrange(q_out_cl, 'b h w c -> b c h w').contiguous()
+            indices = indices_flat.view(z_cl.shape[0], z_cl.shape[1], z_cl.shape[2])  # (B,H,W)
+        elif orig_ndim == 5:
+            z_q = rearrange(q_out_cl, 'b d h w c -> b c d h w').contiguous()
+            indices = indices_flat.view(z_cl.shape[0], z_cl.shape[1], z_cl.shape[2], z_cl.shape[3])  # (B,D,H,W)
+        else:
+            z_q = q_out_cl
+            indices = indices_flat.view(*z_cl.shape[:-1])
+
+        # Straight-through estimator for gradients: preserve encoder gradients
+        z_q = z + (z_q - z).detach()
+
+        # compute perplexity over indices
+        with torch.no_grad():
+            flat_inds = indices_flat
+            if self.codebook_size <= 2_000_000:
+                counts = torch.bincount(flat_inds, minlength=self.codebook_size).float()
+                probs = counts / counts.sum().clamp_min(1.0)
+                perplexity = torch.exp(-torch.sum(probs * torch.log(probs + 1e-10)))
+            else:
+                unique = torch.unique(flat_inds)
+                usage = unique.numel() / float(self.codebook_size)
+                perplexity = torch.tensor(usage * float(self.codebook_size), device=z.device)
+
+        loss = commitment_loss
+
+        return z_q, loss, (perplexity, None, indices)
