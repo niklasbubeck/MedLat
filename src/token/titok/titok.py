@@ -31,9 +31,9 @@ from omegaconf import OmegaConf
 from pathlib import Path
 from src.discrete.vq_models import VQModel
 from src.discrete.quantizer.quantize import VectorQuantizer2
-from src.registry import register_model
+from typing import Optional
 
-__all__ = ["TiTok", "TiTok_B_64", "TiTok_L_32", "TiTok_S_128"]
+__all__ = ["TiTok"]
 
 
 
@@ -115,7 +115,7 @@ class TiTok(nn.Module):
                  token_size=12,
                  codebook_size=4096,
                  quantizer_loss_weight=1.0,
-                 pixel_vqgan: VQModel = PretrainedTokenizer("/vol/miltank/users/bubeckn/1d-tokenizer/maskgit-vqgan-imagenet-f16-256.bin"), 
+                 pixel_vqgan: Optional[VQModel] = None, # VQModel = PretrainedTokenizer("/vol/miltank/users/bubeckn/1d-tokenizer/maskgit-vqgan-imagenet-f16-256.bin"), 
                  stage="1", 
                  quantize_mode="vq"):
         super().__init__()
@@ -123,6 +123,7 @@ class TiTok(nn.Module):
         self.stage=stage
         assert stage in ["1", "2", "e2e"]
         assert len(image_size) == len(patch_size)
+        assert not (self.stage == "1" and pixel_vqgan is None), "For stage 1, pixel_vqgan is required."
         self.dims = len(image_size)
 
         print(f"num latent tokens: {num_latent_tokens}")
@@ -285,16 +286,3 @@ class TiTok(nn.Module):
         return decoded, loss
 
     
-
-@register_model("token.titok.s_128")
-def TiTok_S_128(**kwargs):
-    return TiTok(hidden_size=512, depth=8, num_heads=8, num_latent_tokens=128, token_size=12, **kwargs)
-
-@register_model("token.titok.b_64")
-def TiTok_B_64(**kwargs):
-    return TiTok(hidden_size=768, depth=12, num_heads=12, num_latent_tokens=64, token_size=12, **kwargs)
-
-@register_model("token.titok.l_32")
-def TiTok_L_32(**kwargs):
-    return TiTok(hidden_size=1024, depth=24, num_heads=16, num_latent_tokens=32, token_size=12, **kwargs)
-

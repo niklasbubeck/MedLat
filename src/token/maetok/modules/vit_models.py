@@ -13,15 +13,15 @@ import math
 from functools import partial
 import scipy.stats as stats
 from typing import Optional, Tuple
-from timm.layers import DropPath
 from torch import Tensor
 
-from .rope_utils import (
-    apply_rotary_emb, compute_axial_cis, compute_mixed_cis, 
-    init_random_2d_freqs, init_t_xy
-)
-
 from src.modules.in_and_out import PatchEmbed, ToPixel
+from src.modules.pos_embed import (
+    get_sincos_pos_embed, 
+    apply_rotary_emb, 
+    get_rope_tensor_2d,
+    get_rope_tensor_3d
+)
 
 
 class Attention(nn.Module):
@@ -39,7 +39,7 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x, attn_mask=None, freqs_cis=None, num_prefix_tokens=1, num_latent_tokens=32):
+    def forward(self, x, attn_mask=None, rope_tensor=None, num_prefix_tokens=1, num_latent_tokens=32):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
         qkv = qkv.permute(2, 0, 3, 1, 4)
@@ -48,13 +48,42 @@ class Attention(nn.Module):
         
         q, k = self.q_norm(q), self.k_norm(k)
         
-        if freqs_cis is not None:
+        if rope_tensor is not None:
+            # Apply RoPE to the image tokens (skip prefix and latent tokens)
+            # rope_tensor shape: (num_positions, head_dim * 2) where num_positions = grid_h * grid_w
+            # x shape: (B, num_heads, seq_len, head_dim)
+            # We need to apply RoPE to image tokens only
             if num_latent_tokens == 0:
-                q_rot, k_rot = apply_rotary_emb(q[:, :, num_prefix_tokens:], k[:, :, num_prefix_tokens:], freqs_cis=freqs_cis)
+                # Apply RoPE to all tokens except prefix
+                num_img_tokens = q.shape[2] - num_prefix_tokens
+                q_img = q[:, :, num_prefix_tokens:]  # (B, num_heads, num_img_tokens, head_dim)
+                k_img = k[:, :, num_prefix_tokens:]
+            else:
+                # Apply RoPE only to image tokens (between prefix and latent)
+                num_img_tokens = q.shape[2] - num_prefix_tokens - num_latent_tokens
+                q_img = q[:, :, num_prefix_tokens:-num_latent_tokens]  # (B, num_heads, num_img_tokens, head_dim)
+                k_img = k[:, :, num_prefix_tokens:-num_latent_tokens]
+            
+            # Slice rope_tensor to match number of image tokens
+            # rope_tensor: (num_positions, head_dim * 2)
+            # We need: (num_img_tokens, head_dim * 2)
+            if rope_tensor.shape[0] < num_img_tokens:
+                raise ValueError(
+                    f"rope_tensor has {rope_tensor.shape[0]} positions but need {num_img_tokens} "
+                    f"for image tokens. seq_len={q.shape[2]}, num_prefix_tokens={num_prefix_tokens}, "
+                    f"num_latent_tokens={num_latent_tokens}"
+                )
+            rope_tensor_sliced = rope_tensor[:num_img_tokens]
+            
+            # Apply RoPE
+            q_rot = apply_rotary_emb(q_img, rope_tensor_sliced)
+            k_rot = apply_rotary_emb(k_img, rope_tensor_sliced)
+            
+            # Concatenate back
+            if num_latent_tokens == 0:
                 q = torch.cat([q[:, :, :num_prefix_tokens], q_rot], dim=2)
                 k = torch.cat([k[:, :, :num_prefix_tokens], k_rot], dim=2)
             else:
-                q_rot, k_rot = apply_rotary_emb(q[:, :, num_prefix_tokens:-num_latent_tokens], k[:, :, num_prefix_tokens:-num_latent_tokens], freqs_cis=freqs_cis)
                 q = torch.cat([q[:, :, :num_prefix_tokens], q_rot, q[:, :, -num_latent_tokens:]], dim=2)
                 k = torch.cat([k[:, :, :num_prefix_tokens], k_rot, k[:, :, -num_latent_tokens:]], dim=2)
         
@@ -102,6 +131,22 @@ class SwiGLUFFN(nn.Module):
         x1, x2 = self.w12(x).chunk(2, dim=-1)
         return self.w3(F.silu(x1) * x2)
 
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+    def __init__(self, drop_prob: float = 0.0):
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return x
+        keep_prob = 1 - self.drop_prob
+        random_tensor = keep_prob + torch.rand(x.shape[0], 1, 1, device=x.device, dtype=x.dtype)
+        random_tensor.floor_()
+        output = x.div(keep_prob) * random_tensor
+        return output
+
+
 class Block(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_norm=False, drop=0., attn_drop=0.,
                  drop_path=0., mlp_layer=Mlp, attn_layer=Attention, act_layer=nn.GELU, norm_layer=nn.LayerNorm):
@@ -109,13 +154,13 @@ class Block(nn.Module):
         self.norm1 = norm_layer(dim)
         self.attn = attn_layer(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_norm=qk_norm, 
                              attn_drop=attn_drop, proj_drop=drop, norm_layer=norm_layer)
-        self.drop_path = nn.Identity() if drop_path == 0. else nn.Dropout(drop_path)
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = mlp_layer(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-    def forward(self, x, freqs_cis=None, num_prefix_tokens=1, num_latent_tokens=32):
-        x = x + self.drop_path(self.attn(self.norm1(x), freqs_cis=freqs_cis, 
+    def forward(self, x, rope_tensor=None, num_prefix_tokens=1, num_latent_tokens=32):
+        x = x + self.drop_path(self.attn(self.norm1(x), rope_tensor=rope_tensor, 
                                         num_prefix_tokens=num_prefix_tokens, num_latent_tokens=num_latent_tokens))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
@@ -198,7 +243,7 @@ class MoVQBlockv2(nn.Module):
 
     def forward(self, x: torch.Tensor, interpolate_zq: torch.Tensor,
                 attn_mask: torch.Tensor = None, 
-                freqs_cis=None, num_prefix_tokens=1, num_latent_tokens=32) -> torch.Tensor:
+                rope_tensor=None, num_prefix_tokens=1, num_latent_tokens=32) -> torch.Tensor:
         
         shift_msa, scale_msa, shift_mlp, scale_mlp = self.adaLN_modulation(interpolate_zq).chunk(4, dim=-1)
         
@@ -210,7 +255,7 @@ class MoVQBlockv2(nn.Module):
             modulate(attn_out[:, -num_latent_tokens:], shift_msa, scale_msa)
         ], dim=1)
             
-        attn_out = self.attn(attn_out, attn_mask, freqs_cis, num_prefix_tokens, num_latent_tokens)
+        attn_out = self.attn(attn_out, attn_mask, rope_tensor=rope_tensor, num_prefix_tokens=num_prefix_tokens, num_latent_tokens=num_latent_tokens)
         x = x + self.drop_path1(attn_out)
         
         # mlp
@@ -250,9 +295,26 @@ class MAETokViTEncoder(nn.Module):
                                      in_chans=in_channels, embed_dim=embed_dim)
         self.num_img_tokens = self.patch_embed.num_patches
         
-        # Position embedding
-        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_img_tokens + self.num_prefix_tokens, embed_dim))
-        nn.init.trunc_normal_(self.pos_embed, std=0.02)
+        # Position embedding - use sinusoidal from pos_embed.py
+        self.use_ape = use_ape
+        if self.use_ape:
+            # Calculate grid size for position embedding
+            if isinstance(img_size, int):
+                grid_size = img_size // patch_size
+            elif len(img_size) == 2:
+                grid_size = (img_size[0] // patch_size, img_size[1] // patch_size)
+            else:  # 3D
+                grid_size = tuple(s // p for s, p in zip(img_size, patch_size))
+            
+            pos_embed = get_sincos_pos_embed(
+                dim=embed_dim,
+                grid_size=grid_size,
+                dims=self.patch_embed.dims,
+                cls_token=True
+            )
+            self.pos_embed = nn.Parameter(pos_embed.unsqueeze(0), requires_grad=False)
+        else:
+            self.pos_embed = None
         
         # CLS token
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -265,6 +327,7 @@ class MAETokViTEncoder(nn.Module):
         if self.num_latent_tokens:
             self.latent_tokens = nn.Parameter(torch.zeros(1, self.num_latent_tokens, embed_dim))
             nn.init.normal_(self.latent_tokens, std=0.02)
+            # Latent position embeddings remain learnable
             self.latent_pos_embed = nn.Parameter(torch.zeros(1, self.num_latent_tokens, embed_dim))
             nn.init.trunc_normal_(self.latent_pos_embed, std=0.02)
 
@@ -278,7 +341,6 @@ class MAETokViTEncoder(nn.Module):
             nn.init.normal_(self.mask_token, std=0.02)
 
         # RoPE
-        self.use_ape = use_ape
         self.use_rope = use_rope
         if self.use_rope:
             self.use_ape = False
@@ -292,36 +354,27 @@ class MAETokViTEncoder(nn.Module):
             self.use_rope = False
             self.use_ape = True
         
-        if self.rope_mixed and self.use_rope:
-            self.compute_cis = partial(compute_mixed_cis, num_heads=num_heads)
-            freqs = []
-            for i in range(depth):
-                freqs.append(
-                    init_random_2d_freqs(dim=embed_dim // num_heads, num_heads=num_heads, theta=self.rope_theta)
-                )
-            freqs = torch.stack(freqs, dim=1).view(2, depth, -1)
-            self.freqs = nn.Parameter(freqs.clone(), requires_grad=True)
-            
-            if base_img_size != img_size:
-                if isinstance(base_img_size, int):
-                    t_x, t_y = init_t_xy(end_x=base_img_size // patch_size, end_y=base_img_size // patch_size)
-                else:
-                    t_x, t_y = init_t_xy(end_x=base_img_size[1] // patch_size[1], end_y=base_img_size[0] // patch_size[0])
-            else:
-                if isinstance(img_size, int):
-                    t_x, t_y = init_t_xy(end_x=img_size // patch_size, end_y=img_size // patch_size)
-                else:
-                    t_x, t_y = init_t_xy(end_x=img_size[1] // patch_size[1], end_y=img_size[0] // patch_size[0])
-            self.register_buffer('freqs_t_x', t_x)
-            self.register_buffer('freqs_t_y', t_y)
-            
-        elif self.use_rope:
-            self.compute_cis = partial(compute_axial_cis, dim=embed_dim // num_heads, theta=rope_theta)
+        # Initialize RoPE tensors using pos_embed.py functions
+        if self.use_rope:
+            # Calculate grid dimensions for RoPE
             if isinstance(img_size, int):
-                freqs_cis = self.compute_cis(end_x=img_size // patch_size, end_y=img_size // patch_size)
+                grid_h = grid_w = img_size // patch_size
+            elif len(img_size) == 2:
+                grid_h = img_size[0] // patch_size
+                grid_w = img_size[1] // patch_size
             else:
-                freqs_cis = self.compute_cis(end_x=img_size[1] // patch_size[1], end_y=img_size[0] // patch_size[0])
-            self.register_buffer('freqs_cis', freqs_cis)
+                # 3D - RoPE not supported, should have been disabled above
+                grid_h = grid_w = 1
+            
+            # Use get_rope_tensor_2d from pos_embed.py
+            # head_dim is embed_dim // num_heads
+            head_dim = embed_dim // num_heads
+            rope_tensor = get_rope_tensor_2d(head_dim, grid_h, grid_w)
+            self.register_buffer('rope_tensor', rope_tensor)
+            
+            # Store grid dimensions for dynamic resizing
+            self.grid_h = grid_h
+            self.grid_w = grid_w
             
         # Transformer blocks
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
@@ -335,7 +388,7 @@ class MAETokViTEncoder(nn.Module):
         self.norm = nn.LayerNorm(embed_dim)
 
     def no_weight_decay(self):
-        return {'pos_embed', 'cls_token', 'latent_tokens', 'latent_pos_embed', 'freqs'}
+        return {'pos_embed', 'cls_token', 'latent_tokens', 'latent_pos_embed'}
 
     def sample_orders(self, bsz, seq_len):
         orders = []
@@ -378,7 +431,7 @@ class MAETokViTEncoder(nn.Module):
             mask = None
         
         # Position embedding
-        if self.use_ape:
+        if self.use_ape and self.pos_embed is not None:
             x = x + self.pos_embed
         x = self.pos_drop(x)  # (B, 1 + num_patches, embed_dim)
         
@@ -391,27 +444,25 @@ class MAETokViTEncoder(nn.Module):
         if self.use_ape:
             for blk in self.blocks:
                 x = blk(x)
-        elif self.rope_mixed and self.use_rope:
-            if self.freqs_t_x.shape[0] != x.shape[1] - self.num_prefix_tokens - self.num_latent_tokens:
-                t_x, t_y = init_t_xy(end_x=W // self.patch_size, end_y=H // self.patch_size)
-                t_x, t_y = t_x.to(x.device), t_y.to(x.device)
-            else:
-                t_x, t_y = self.freqs_t_x, self.freqs_t_y
-            freqs_cis = self.compute_cis(self.freqs, t_x, t_y)
-            
-            
-            for i, blk in enumerate(self.blocks):
-                x = blk(x, freqs_cis=freqs_cis[i], num_prefix_tokens=self.num_prefix_tokens, 
-                       num_latent_tokens=self.num_latent_tokens)
         elif self.use_rope:
-            if self.freqs_cis.shape[0] != x.shape[1] - self.num_prefix_tokens - self.num_latent_tokens:
-                freqs_cis = self.compute_cis(end_x=W // self.patch_size, end_y=H // self.patch_size)
-            else:
-                freqs_cis = self.freqs_cis
-        
+            # Get or compute RoPE tensor for current spatial dimensions
+            # patch_size is stored as int in encoder
+            patch_h = self.patch_size if isinstance(self.patch_size, int) else self.patch_size[0]
+            patch_w = self.patch_size if isinstance(self.patch_size, int) else self.patch_size[1] if len(self.patch_size) > 1 else self.patch_size[0]
             
-            for i, blk in enumerate(self.blocks):
-                x = blk(x, freqs_cis=freqs_cis[i], num_prefix_tokens=self.num_prefix_tokens, 
+            current_grid_h = H // patch_h
+            current_grid_w = W // patch_w
+            
+            # Recompute RoPE tensor if spatial dimensions changed
+            if hasattr(self, 'grid_h') and (current_grid_h != self.grid_h or current_grid_w != self.grid_w):
+                head_dim = self.embed_dim // self.blocks[0].attn.num_heads
+                rope_tensor = get_rope_tensor_2d(head_dim, current_grid_h, current_grid_w)
+                rope_tensor = rope_tensor.to(x.device)
+            else:
+                rope_tensor = self.rope_tensor
+            
+            for blk in self.blocks:
+                x = blk(x, rope_tensor=rope_tensor, num_prefix_tokens=self.num_prefix_tokens, 
                        num_latent_tokens=self.num_latent_tokens)
         else:
             for blk in self.blocks:
@@ -495,9 +546,26 @@ class MAETokViTDecoder(nn.Module):
         self.latent_pos_embed = nn.Parameter(torch.zeros(1, self.num_latent_tokens, embed_dim))
         nn.init.trunc_normal_(self.latent_pos_embed, std=0.02)
 
-        # Position embedding
-        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_img_tokens + self.num_prefix_tokens, embed_dim))
-        nn.init.trunc_normal_(self.pos_embed, std=0.02)
+        # Position embedding - use sinusoidal from pos_embed.py
+        self.use_ape = use_ape
+        if self.use_ape:
+            # Calculate grid size for position embedding
+            if isinstance(img_size, int):
+                grid_size = img_size // patch_size
+            elif len(img_size) == 2:
+                grid_size = (img_size[0] // patch_size, img_size[1] // patch_size)
+            else:  # 3D
+                grid_size = tuple(s // p for s, p in zip(img_size, patch_size))
+            
+            pos_embed = get_sincos_pos_embed(
+                dim=embed_dim,
+                grid_size=grid_size,
+                dims=self.dims,
+                cls_token=cls_token
+            )
+            self.pos_embed = nn.Parameter(pos_embed.unsqueeze(0), requires_grad=False)
+        else:
+            self.pos_embed = None
 
         # CLS token
         if cls_token:
@@ -510,11 +578,10 @@ class MAETokViTDecoder(nn.Module):
         self.pos_drop = nn.Dropout(p=proj_drop)
 
         # To pixel head
-        self.to_pixel = ToPixel(to_pixel=to_pixel, img_size=self.img_size, in_channels=in_channels,
+        self.to_pixel = ToPixel(to_pixel=to_pixel, img_size=self.img_size, out_channels=in_channels,
                                in_dim=embed_dim, patch_size=self.patch_size)
 
         # RoPE
-        self.use_ape = use_ape
         self.use_rope = use_rope
         if self.use_rope:
             self.use_ape = False
@@ -526,36 +593,27 @@ class MAETokViTDecoder(nn.Module):
             self.use_rope = False
             self.use_ape = True
         
-        if self.rope_mixed and self.use_rope:
-            self.compute_cis = partial(compute_mixed_cis, num_heads=num_heads)
-            freqs = []
-            for i in range(depth):
-                freqs.append(
-                    init_random_2d_freqs(dim=embed_dim // num_heads, num_heads=num_heads, theta=self.rope_theta)
-                )
-            freqs = torch.stack(freqs, dim=1).view(2, depth, -1)
-            self.freqs = nn.Parameter(freqs.clone(), requires_grad=True)
-            
-            if base_img_size != img_size:
-                if isinstance(base_img_size, int):
-                    t_x, t_y = init_t_xy(end_x=base_img_size // patch_size, end_y=base_img_size // patch_size)
-                else:
-                    t_x, t_y = init_t_xy(end_x=base_img_size[1] // patch_size, end_y=base_img_size[0] // patch_size)
-            else:
-                if isinstance(img_size, int):
-                    t_x, t_y = init_t_xy(end_x=img_size // patch_size, end_y=img_size // patch_size)
-                else:
-                    t_x, t_y = init_t_xy(end_x=img_size[1] // patch_size[1], end_y=img_size[0] // patch_size[0])
-            self.register_buffer('freqs_t_x', t_x)
-            self.register_buffer('freqs_t_y', t_y)
-            
-        elif self.use_rope:
-            self.compute_cis = partial(compute_axial_cis, dim=embed_dim // num_heads, theta=rope_theta)
+        # Initialize RoPE tensors using pos_embed.py functions
+        if self.use_rope:
+            # Calculate grid dimensions for RoPE
             if isinstance(img_size, int):
-                freqs_cis = self.compute_cis(end_x=img_size // patch_size, end_y=img_size // patch_size)
+                grid_h = grid_w = img_size // patch_size
+            elif len(img_size) == 2:
+                grid_h = img_size[0] // patch_size
+                grid_w = img_size[1] // patch_size
             else:
-                freqs_cis = self.compute_cis(end_x=img_size[1] // patch_size, end_y=img_size[0] // patch_size)
-            self.register_buffer('freqs_cis', freqs_cis)
+                # 3D - RoPE not supported, should have been disabled above
+                grid_h = grid_w = 1
+            
+            # Use get_rope_tensor_2d from pos_embed.py
+            # head_dim is embed_dim // num_heads
+            head_dim = embed_dim // num_heads
+            rope_tensor = get_rope_tensor_2d(head_dim, grid_h, grid_w)
+            self.register_buffer('rope_tensor', rope_tensor)
+            
+            # Store grid dimensions for dynamic resizing
+            self.grid_h = grid_h
+            self.grid_w = grid_w
            
         
 
@@ -587,7 +645,7 @@ class MAETokViTDecoder(nn.Module):
             self.norm = nn.LayerNorm(embed_dim)
 
     def no_weight_decay(self):
-        return {'pos_embed', 'cls_token', 'mask_token', 'latent_pos_embed', 'freqs'}
+        return {'pos_embed', 'cls_token', 'mask_token', 'latent_pos_embed'}
 
     @property
     def last_layer(self):
@@ -605,7 +663,7 @@ class MAETokViTDecoder(nn.Module):
             x = z
 
         # Add position embedding
-        if self.use_ape:
+        if self.use_ape and self.pos_embed is not None:
             x = x + self.pos_embed[:, :num_img_tokens]
         x = self.pos_drop(x)
 
@@ -621,35 +679,30 @@ class MAETokViTDecoder(nn.Module):
                            num_latent_tokens=self.num_latent_tokens)
                 else:
                     x = blk(x)
-        elif self.rope_mixed and self.use_rope:
-            if self.freqs_t_x.shape[0] != x.shape[1] - self.num_prefix_tokens - self.num_latent_tokens:
-                t_x, t_y = init_t_xy(end_x=W // self.patch_size, end_y=H // self.patch_size)
-                t_x, t_y = t_x.to(x.device), t_y.to(x.device)
-            else:
-                t_x, t_y = self.freqs_t_x, self.freqs_t_y
-            freqs_cis = self.compute_cis(self.freqs, t_x, t_y)
-            
-            
-            for i, blk in enumerate(self.blocks):
-                if self.use_movq:
-                    x = blk(x, interpolate_zq, freqs_cis=freqs_cis[i], 
-                           num_prefix_tokens=self.num_prefix_tokens, num_latent_tokens=self.num_latent_tokens)
-                else:
-                    x = blk(x, freqs_cis=freqs_cis[i], num_prefix_tokens=self.num_prefix_tokens, 
-                           num_latent_tokens=self.num_latent_tokens)
         elif self.use_rope:
-            if self.freqs_cis.shape[0] != x.shape[1] - self.num_prefix_tokens - self.num_latent_tokens:
-                freqs_cis = self.compute_cis(end_x=W // self.patch_size, end_y=H // self.patch_size)
+            # Get or compute RoPE tensor for current spatial dimensions
+            if H is not None and W is not None:
+                current_grid_h = H // (self.patch_size[0] if isinstance(self.patch_size, tuple) else self.patch_size)
+                current_grid_w = W // (self.patch_size[1] if isinstance(self.patch_size, tuple) else self.patch_size)
             else:
-                freqs_cis = self.freqs_cis
+                # Use default grid dimensions
+                current_grid_h = self.grid_h
+                current_grid_w = self.grid_w
             
+            # Recompute RoPE tensor if spatial dimensions changed
+            if hasattr(self, 'grid_h') and (current_grid_h != self.grid_h or current_grid_w != self.grid_w):
+                head_dim = self.embed_dim // self.blocks[0].attn.num_heads
+                rope_tensor = get_rope_tensor_2d(head_dim, current_grid_h, current_grid_w)
+                rope_tensor = rope_tensor.to(x.device)
+            else:
+                rope_tensor = self.rope_tensor
             
             for i, blk in enumerate(self.blocks):
                 if self.use_movq:
-                    x = blk(x, interpolate_zq, freqs_cis=freqs_cis[i], 
+                    x = blk(x, interpolate_zq, rope_tensor=rope_tensor, 
                            num_prefix_tokens=self.num_prefix_tokens, num_latent_tokens=self.num_latent_tokens)
                 else:
-                    x = blk(x, freqs_cis=freqs_cis[i], num_prefix_tokens=self.num_prefix_tokens, 
+                    x = blk(x, rope_tensor=rope_tensor, num_prefix_tokens=self.num_prefix_tokens, 
                            num_latent_tokens=self.num_latent_tokens)
         else:
             for i, blk in enumerate(self.blocks):
@@ -683,7 +736,6 @@ if __name__ == '__main__':
                  base_img_size=[224, 384])
     out = encoder(data)
     ### Usually here we have the quant layers to align like in MaeTok which go enc_embed_dim -> codebook_embed_dim -> decoder_embed_dim
-    print(out.shape)
     decoder = MAETokViTDecoder(in_channels=3, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4.,
                  img_size=[224, 384], patch_size=[16, 16], drop_path_rate=0.0,
                  qkv_bias=True, qk_norm=False, attn_drop=0., proj_drop=0.,
@@ -691,7 +743,6 @@ if __name__ == '__main__':
                  rope_theta=100.0, rope_mixed=False, use_rope=False, use_ape=True,
                  cls_token=True, base_img_size=[224, 384], use_movq=False)
     out = decoder(out)
-    print(out.shape)
 
 
     data = torch.randn(1, 3, 224, 224, 384)
@@ -702,7 +753,6 @@ if __name__ == '__main__':
                  base_img_size=[224, 224, 384])
     out = encoder(data)
     ### Usually here we have the "quant" layers to align like in MaeTok which go enc_embed_dim -> codebook_embed_dim -> decoder_embed_dim
-    print(out.shape)
     decoder = MAETokViTDecoder(in_channels=3, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4.,
                  img_size=[224, 224, 384], patch_size=[16, 16, 16], drop_path_rate=0.0,
                  qkv_bias=True, qk_norm=False, attn_drop=0., proj_drop=0.,
@@ -710,4 +760,3 @@ if __name__ == '__main__':
                  rope_theta=100.0, rope_mixed=False, use_rope=False, use_ape=True,
                  cls_token=True, base_img_size=[224, 224, 384], use_movq=False)
     out = decoder(out)
-    print(out.shape)
