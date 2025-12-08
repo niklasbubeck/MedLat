@@ -1,7 +1,7 @@
-from src.continuous.modules.ldm_modules import Encoder as LDMEncoder, Decoder as LDMDecoder
-from src.continuous.modules.maisi_modules import MaisiEncoder, MaisiDecoder
-from src.registry import register_model
-from src.continuous.vae_models import AutoencoderKL
+from medtok.continuous.modules.ldm_modules import Encoder as LDMEncoder, Decoder as LDMDecoder
+from medtok.continuous.modules.maisi_modules import MaisiEncoder, MaisiDecoder
+from medtok.registry import register_model
+from medtok.continuous.vae_models import AutoencoderKL
 
 
 @register_model(f"continuous.aekl.f4_d3", 

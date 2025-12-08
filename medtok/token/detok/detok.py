@@ -9,12 +9,12 @@ import torch.nn.functional as F
 from einops import rearrange
 from einops.layers.torch import Rearrange
 from torch import Tensor
-from src.modules.in_and_out import PatchEmbed, ToPixel
-from src.modules.pos_embed import get_rope_tensor_2d, get_rope_tensor_3d, apply_rotary_emb
+from medtok.modules.in_and_out import PatchEmbed, ToPixel
+from medtok.modules.pos_embed import get_rope_tensor_2d, get_rope_tensor_3d, apply_rotary_emb
 
-from src.modules.gaussian_dist import DiagonalGaussianDistribution
-from src.utils import init_from_ckpt
-from src.registry import register_model
+from medtok.modules.gaussian_dist import DiagonalGaussianDistribution
+from medtok.utils import init_from_ckpt
+from medtok.registry import register_model
 
 logger = logging.getLogger("DeTok")
 

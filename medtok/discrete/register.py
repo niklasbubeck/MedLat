@@ -1,9 +1,9 @@
 import torch 
 import torch.nn as nn
-from src.registry import register_model
-from src.discrete.modules.ldm_modules import Encoder, Decoder
-from src.discrete.vq_models import VQModel
-from src.discrete.quantizer import *
+from medtok.registry import register_model
+from medtok.discrete.modules.ldm_modules import Encoder, Decoder
+from medtok.discrete.vq_models import VQModel
+from medtok.discrete.quantizer import *
 
 @register_model("discrete.vq.f4_d3_e8192")
 def VQ_f4_d3_e8192(
@@ -336,8 +336,182 @@ def MSRQ_f16_d32_e4096(
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
 
-@register_model(f"discrete.lfq.f16_b10")
-def LFQ_f16_b10(
+@register_model("discrete.lfq.f4_d3_b4")
+def LFQ_f4_d3_b4(
+    img_size=256,
+    dims=2,
+    double_z=False,
+    z_channels=3,
+    in_channels=3,
+    out_ch=3,
+    ch=128,
+    ch_mult=[1, 2, 4],
+    num_res_blocks=2,
+    attn_resolutions=[],
+    dropout=0.0,
+
+    token_bits=4,   # 3 × 4 = 12 bits ≈ 13-bit VQ
+    beta=0.25,
+    commitment_cost=0.25,
+    entropy_loss_weight=0.2,
+    entropy_loss_temperature=0.01,
+    entropy_gamma=1.0,
+    **kwargs
+):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = LookupFreeQuantizer(
+        token_bits=token_bits,
+        beta=beta,
+        commitment_cost=commitment_cost,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model("discrete.lfq.f8_d4_b4")
+def LFQ_f8_d4_b4(
+    img_size=256,
+    dims=2,
+    double_z=False,
+    z_channels=4,
+    in_channels=1,
+    out_ch=1,
+    ch=128,
+    ch_mult=[1, 2, 2, 4],
+    num_res_blocks=2,
+    attn_resolutions=[32],
+    dropout=0.0,
+
+    token_bits=4,   # 4 × 4 = 16 bits ≈ 14 VQ
+    beta=0.25,
+    commitment_cost=0.25,
+    entropy_loss_weight=0.2,
+    entropy_loss_temperature=0.01,
+    entropy_gamma=1.0,
+    **kwargs
+):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = LookupFreeQuantizer(
+        token_bits=token_bits,
+        beta=beta,
+        commitment_cost=commitment_cost,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model("discrete.lfq.f16_d8_b2")
+def LFQ_f16_d8_b2(
+    img_size=256,
+    dims=2,
+    double_z=False,
+    z_channels=8,
+    in_channels=3,
+    out_ch=3,
+    ch=128,
+    ch_mult=[1, 1, 2, 2, 4],
+    num_res_blocks=2,
+    attn_resolutions=[16],
+    dropout=0.0,
+
+    token_bits=2,   # 8 × 2 = 16 bits ≈ 14 VQ
+    beta=0.25,
+    commitment_cost=0.25,
+    entropy_loss_weight=0.2,
+    entropy_loss_temperature=0.01,
+    entropy_gamma=1.0,
+    **kwargs
+):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = LookupFreeQuantizer(
+        token_bits=token_bits,
+        beta=beta,
+        commitment_cost=commitment_cost,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model(f"discrete.lfq.f16_d10_b10")
+def LFQ_f16_d10_b10(
         # --- encoder/decoder config ---
         img_size=256,
         dims=2,
@@ -395,8 +569,8 @@ def LFQ_f16_b10(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
-@register_model(f"discrete.lfq.f16_b12")
-def LFQ_f16_b12(
+@register_model(f"discrete.lfq.f16_d12_b12")
+def LFQ_f16_d12_b12(
         # --- encoder/decoder config ---
         img_size=256,
         dims=2,
@@ -454,8 +628,8 @@ def LFQ_f16_b12(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
-@register_model(f"discrete.lfq.f16_b14")
-def LFQ_f16_b14(
+@register_model(f"discrete.lfq.f16_d14_b14")
+def LFQ_f16_d14_b14(
         # --- encoder/decoder config ---
         img_size=256,
         dims=2,
@@ -513,8 +687,8 @@ def LFQ_f16_b14(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
-@register_model(f"discrete.lfq.f16_b16")
-def LFQ_f16_b16(
+@register_model(f"discrete.lfq.f16_d16_b16")
+def LFQ_f16_d16_b16(
         # --- encoder/decoder config ---
         img_size=256,
         dims=2,
@@ -572,8 +746,8 @@ def LFQ_f16_b16(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
-@register_model(f"discrete.lfq.f16_b18")
-def LFQ_f16_b18(
+@register_model(f"discrete.lfq.f16_d18_b18")
+def LFQ_f16_d18_b18(
         # --- encoder/decoder config ---
         img_size=256,
         dims=2,
@@ -991,6 +1165,167 @@ def SimVQ_f16_d8_e16384(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
+@register_model("discrete.fsq.f4_d3_l8192")
+def FSQ_f4_d3_l8192(
+        # --- encoder/decoder config (IDENTICAL) ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=3,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+
+        # --- FSQ quantizer config ---
+        levels=[32, 16, 16],  # 8192 total states
+        **kwargs
+    ):
+
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+
+    quantizer = FiniteScalarQuantizer(
+        levels=levels,
+        dim=z_channels,
+    )
+
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model("discrete.fsq.f8_d4_l16384")
+def FSQ_f8_d4_l16384(
+        # --- encoder/decoder config (IDENTICAL) ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=4,
+        in_channels=1,
+        out_ch=1,
+        ch=128,
+        ch_mult=[1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[32],
+        dropout=0.0,
+
+        # --- FSQ quantizer config ---
+        levels=[16, 8, 8, 16],  # 16384 total states
+        **kwargs
+    ):
+
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+
+    quantizer = FiniteScalarQuantizer(
+        levels=levels,
+        dim=z_channels,
+    )
+
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model("discrete.fsq.f16_d8_l16384")
+def FSQ_f16_d8_l16384(
+        # --- encoder/decoder config (IDENTICAL) ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=8,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[16],
+        dropout=0.0,
+
+        # --- FSQ quantizer config ---
+        levels=[4, 4, 4, 4, 4, 4, 2, 2],  # 16384 total states
+        **kwargs
+    ):
+
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+
+    quantizer = FiniteScalarQuantizer(
+        levels=levels,
+        dim=z_channels,
+    )
+
+    return VQModel(encoder, decoder, quantizer, **kwargs)
 
 @register_model(f"discrete.fsq.f16_d256_e8",
 code_url="https://github.com/google-research/google-research/blob/master/fsq/fsq.ipynb",

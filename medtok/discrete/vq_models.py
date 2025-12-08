@@ -1,9 +1,9 @@
 # Adopted from LDM's KL-VAE: https://github.com/CompVis/latent-diffusion
 import torch
 from torch import nn
-from src.utils import init_from_ckpt
+from medtok.utils import init_from_ckpt
 from typing import Optional, Sequence, Union, List, Any, Dict, Tuple
-from src.discrete.modules.ldm_modules import get_conv_layer
+from medtok.discrete.modules.ldm_modules import get_conv_layer
 
 __all__ = ["VQModel"]
 

@@ -1,9 +1,9 @@
 import torch
-from src.registry import register_model
+from medtok.registry import register_model
 from .titok import TiTok
 
 from typing import Optional
-from src.discrete.vq_models import VQModel
+from medtok.discrete.vq_models import VQModel
 
 @register_model("token.titok.s_128")
 def TiTok_S_128(image_size: int | tuple[int, ...],

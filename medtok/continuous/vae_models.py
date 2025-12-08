@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 from ..utils import init_from_ckpt
-from src.continuous.modules.ldm_modules import get_conv_layer
-from src.modules.gaussian_dist import DiagonalGaussianDistribution
+from medtok.continuous.modules.ldm_modules import get_conv_layer
+from medtok.modules.gaussian_dist import DiagonalGaussianDistribution
 
 __all__ = [
     "AutoencoderKL",

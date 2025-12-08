@@ -10,7 +10,7 @@ from typing import Any, List, Union, Optional, Tuple, Sequence, Text, Mapping, D
 import random
 from .modules import *
 from torch.amp import autocast
-from src.registry import register_model
+from medtok.registry import register_model
 
 
 __all__ = ["VectorQuantizer", "GumbelQuantize", "QINCoVectorQuantizer2", "VectorQuantizer2", "SimVQ", "ResidualQuantizer", "GroupedVQ", "MultiScaleResidualQuantizer", "LookupFreeQuantizer", "FiniteScalarQuantizer"]

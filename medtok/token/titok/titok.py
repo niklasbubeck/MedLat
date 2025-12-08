@@ -24,13 +24,13 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 import torch.nn.functional as F
-from src.token.titok.modules import TiTokEncoder, TiTokDecoder, Pixel_Encoder, Pixel_Decoder, Pixel_Quantizer
-from src.modules.gaussian_dist import DiagonalGaussianDistribution
+from medtok.token.titok.modules import TiTokEncoder, TiTokDecoder, Pixel_Encoder, Pixel_Decoder, Pixel_Quantizer
+from medtok.modules.gaussian_dist import DiagonalGaussianDistribution
 import json
 from omegaconf import OmegaConf
 from pathlib import Path
-from src.discrete.vq_models import VQModel
-from src.discrete.quantizer.quantize import VectorQuantizer2
+from medtok.discrete.vq_models import VQModel
+from medtok.discrete.quantizer.quantize import VectorQuantizer2
 from typing import Optional
 
 __all__ = ["TiTok"]

@@ -15,8 +15,8 @@ import scipy.stats as stats
 from typing import Optional, Tuple
 from torch import Tensor
 
-from src.modules.in_and_out import PatchEmbed, ToPixel
-from src.modules.pos_embed import (
+from medtok.modules.in_and_out import PatchEmbed, ToPixel
+from medtok.modules.pos_embed import (
     get_sincos_pos_embed, 
     apply_rotary_emb, 
     get_rope_tensor_2d,

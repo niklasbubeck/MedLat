@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .modules import MAETokViTEncoder, MAETokViTDecoder
-from .alignements import HOGAlignment, DinoAlignment, ClipAlignment
-from src.registry import register_model
+from medtok.modules.alignments import HOGAlignment, DinoAlignment, ClipAlignment
+from medtok.registry import register_model
 
 __all__ = ['MAETok_B_128', 'MaskAEModel']
 
@@ -155,21 +155,30 @@ class MaskAEModel(nn.Module):
         if self.aux_hog_dec:
             print('Using HOG decoder')
             use_movq_hog = 'movq' in self.aux_dec_model if self.aux_dec_model else False
-            self.aux_hog_decoder = HOGAlignment(
-                image_size=self.image_size,
+            # Create decoder for HOG alignment
+            aux_hog_decoder_model = MAETokViTDecoder(
+                in_channels=3,
+                embed_dim=384,  # Default decoder dimensions
+                depth=12,
+                num_heads=6,
+                mlp_ratio=4.0,
+                img_size=self.image_size,
+                patch_size=self.dec_patch_size,
+                drop_path_rate=0.0,
                 num_latent_tokens=self.num_latent_tokens,
+                to_pixel='identity',
                 codebook_embed_dim=self.codebook_embed_dim,
-                base_img_size=self.base_image_size,
-                use_ape=self.use_ape,
-                use_rope=self.use_rope,
-                rope_mixed=self.rope_mixed,
                 rope_theta=self.rope_theta,
-                aux_dec_cls_token=self.aux_dec_cls_token,
-                dec_embed_dim=384,  # Default decoder dimensions
-                dec_depth=12,
-                dec_num_heads=6,
-                dec_mlp_ratio=4.0,
-                dec_patch_size=self.dec_patch_size,
+                rope_mixed=self.rope_mixed,
+                use_rope=self.use_rope,
+                use_ape=self.use_ape,
+                cls_token=self.aux_dec_cls_token,
+                base_img_size=self.base_image_size,
+                use_movq=use_movq_hog,
+            )
+            self.aux_hog_decoder = HOGAlignment(
+                decoder=aux_hog_decoder_model,
+                codebook_embed_dim=self.codebook_embed_dim,
                 use_movq=use_movq_hog,
             )
         
@@ -177,22 +186,33 @@ class MaskAEModel(nn.Module):
         if self.aux_dino_dec:
             print('Using DINO decoder')
             use_movq_dino = 'movq' in self.aux_dec_model if self.aux_dec_model else False
-            self.aux_dino_decoder = DinoAlignment(
-                image_size=self.image_size,
+            # Create decoder for DINO alignment
+            aux_dino_decoder_model = MAETokViTDecoder(
+                in_channels=3,
+                embed_dim=384,
+                depth=12,
+                num_heads=6,
+                mlp_ratio=4.0,
+                img_size=self.image_size,
+                patch_size=self.repa_patch_size,
+                drop_path_rate=0.0,
                 num_latent_tokens=self.num_latent_tokens,
+                to_pixel='identity',
                 codebook_embed_dim=self.codebook_embed_dim,
-                base_img_size=self.base_image_size,
-                use_ape=self.use_ape,
-                use_rope=self.use_rope,
-                rope_mixed=self.rope_mixed,
                 rope_theta=self.rope_theta,
-                aux_dec_cls_token=self.aux_dec_cls_token,
+                rope_mixed=self.rope_mixed,
+                use_rope=self.use_rope,
+                use_ape=self.use_ape,
+                cls_token=self.aux_dec_cls_token,
+                base_img_size=self.base_image_size,
+                use_movq=use_movq_dino,
+            )
+            self.aux_dino_decoder = DinoAlignment(
+                decoder=aux_dino_decoder_model,
+                codebook_embed_dim=self.codebook_embed_dim,
+                image_size=self.image_size,
                 repa_model_name=self.repa_model,
                 repa_patch_size=self.repa_patch_size,
-                dec_embed_dim=384,
-                dec_depth=12,
-                dec_num_heads=6,
-                dec_mlp_ratio=4.0,
                 use_movq=use_movq_dino,
             )
         
@@ -200,22 +220,33 @@ class MaskAEModel(nn.Module):
         if self.aux_clip_dec:
             print('Using CLIP decoder')
             use_movq_clip = 'movq' in self.aux_dec_model if self.aux_dec_model else False
-            self.aux_clip_decoder = ClipAlignment(
-                image_size=self.image_size,
+            # Create decoder for CLIP alignment
+            aux_clip_decoder_model = MAETokViTDecoder(
+                in_channels=3,
+                embed_dim=384,
+                depth=12,
+                num_heads=6,
+                mlp_ratio=4.0,
+                img_size=self.image_size,
+                patch_size=self.repa_patch_size,
+                drop_path_rate=0.0,
                 num_latent_tokens=self.num_latent_tokens,
+                to_pixel='identity',
                 codebook_embed_dim=self.codebook_embed_dim,
-                base_img_size=self.base_image_size,
-                use_ape=self.use_ape,
-                use_rope=self.use_rope,
-                rope_mixed=self.rope_mixed,
                 rope_theta=self.rope_theta,
-                aux_dec_cls_token=self.aux_dec_cls_token,
+                rope_mixed=self.rope_mixed,
+                use_rope=self.use_rope,
+                use_ape=self.use_ape,
+                cls_token=self.aux_dec_cls_token,
+                base_img_size=self.base_image_size,
+                use_movq=use_movq_clip,
+            )
+            self.aux_clip_decoder = ClipAlignment(
+                decoder=aux_clip_decoder_model,
+                codebook_embed_dim=self.codebook_embed_dim,
+                image_size=self.image_size,
                 clip_model_name='vit_so400m_patch14_siglip_gap_224',
                 clip_patch_size=self.repa_patch_size,
-                dec_embed_dim=384,
-                dec_depth=12,
-                dec_num_heads=6,
-                dec_mlp_ratio=4.0,
                 use_movq=use_movq_clip,
             )
             

@@ -200,7 +200,7 @@ def rotate_to(src, tgt):
     src, inverse = pack_one(src, '* d')
     tgt, _ = pack_one(tgt, '* d')
 
-    norm_src = src.norm(dim = -1, keepdim = True)
+    norm_src = medtok.norm(dim = -1, keepdim = True)
     norm_tgt = tgt.norm(dim = -1, keepdim = True)
 
     rotated_tgt = efficient_rotation_trick_transform(

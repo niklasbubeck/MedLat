@@ -1,10 +1,10 @@
 """Simple demo showing how to instantiate models via the central registry."""
 
 from src import available_models, get_model, MODEL_REGISTRY
-from src.continuous import AutoencoderKL_f4
-from src.discrete import VQModel
-from src.modules import Encoder, Decoder
-from src.discrete.quantizer import SimVQ
+from medtok.continuous import AutoencoderKL_f4
+from medtok.discrete import VQModel
+from medtok.modules import Encoder, Decoder
+from medtok.discrete.quantizer import SimVQ
 
 def main() -> None:
     print("Available token models:", available_models(""))

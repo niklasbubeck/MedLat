@@ -3,7 +3,7 @@ import torch.nn as nn
 from typing import Tuple
 from .modules import ImagingMaskedEncoder, ImagingMaskedDecoder, ReconstructionCriterion
 from .utils.imaging_model_related import Masker, sincos_pos_embed, patchify, unpatchify
-from src.utils import init_from_ckpt
+from medtok.utils import init_from_ckpt
 from ...registry import register_model
 
 
