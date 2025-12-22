@@ -148,7 +148,7 @@ class PatchEmbed(nn.Module):
 
 
 class ToPixel(nn.Module):
-    def __init__(self, to_pixel='linear', img_size=256, in_channels=3, in_dim=512, patch_size=16) -> None:
+    def __init__(self, to_pixel='linear', img_size=256, out_channels=3, in_dim=512, patch_size=16) -> None:
         super().__init__()
         self.to_pixel_name = to_pixel
         
@@ -194,37 +194,37 @@ class ToPixel(nn.Module):
                              self.img_size[2] // self.patch_size[2])
             self.num_patches = self.grid_size[0] * self.grid_size[1] * self.grid_size[2]
 
-        self.in_channels = in_channels
+        self.out_channels = out_channels
         if to_pixel == 'linear':
             if self.dims == 2:
-                self.model = nn.Linear(in_dim, in_channels * self.patch_size[0] * self.patch_size[1])
+                self.model = nn.Linear(in_dim, out_channels * self.patch_size[0] * self.patch_size[1])
             else:  # 3D
-                self.model = nn.Linear(in_dim, in_channels * self.patch_size[0] * self.patch_size[1] * self.patch_size[2])
+                self.model = nn.Linear(in_dim, out_channels * self.patch_size[0] * self.patch_size[1] * self.patch_size[2])
         elif to_pixel == 'conv':
             if self.dims == 2:
                 self.model = nn.Sequential(
                     Rearrange("b (h w) c -> b c h w", h=self.grid_size[0], w=self.grid_size[1]),
-                    nn.Conv2d(in_dim, self.patch_size[0] * self.patch_size[1] * in_channels, 1, padding=0),
+                    nn.Conv2d(in_dim, self.patch_size[0] * self.patch_size[1] * out_channels, 1, padding=0),
                     Rearrange("b (p1 p2 c) h w -> b c (h p1) (w p2)", p1=self.patch_size[0], p2=self.patch_size[1]),
-                    nn.Conv2d(in_channels, in_channels, 3, padding=1)
+                    nn.Conv2d(out_channels, out_channels, 3, padding=1)
                     )
             else:  # 3D
                 self.model = nn.Sequential(
                     Rearrange("b (d h w) c -> b c d h w", d=self.grid_size[0], h=self.grid_size[1], w=self.grid_size[2]),
-                    nn.Conv3d(in_dim, self.patch_size[0] * self.patch_size[1] * self.patch_size[2] * in_channels, 1, padding=0),
+                    nn.Conv3d(in_dim, self.patch_size[0] * self.patch_size[1] * self.patch_size[2] * out_channels, 1, padding=0),
                     Rearrange("b (p1 p2 p3 c) d h w -> b c (d p1) (h p2) (w p3)", p1=self.patch_size[0], p2=self.patch_size[1], p3=self.patch_size[2]),
-                    nn.Conv3d(in_channels, in_channels, 3, padding=1)
+                    nn.Conv3d(out_channels, out_channels, 3, padding=1)
                     )
         elif to_pixel == 'siren':
             if self.dims == 2:
                 self.model = nn.Sequential(
                     SineLayer(in_dim, in_dim * 2, is_first=True, omega_0=30.),
-                    SineLayer(in_dim * 2, self.img_size[0] // self.patch_size[0] * self.patch_size[0] * in_channels, is_first=False, omega_0=30)
+                    SineLayer(in_dim * 2, self.img_size[0] // self.patch_size[0] * self.patch_size[0] * out_channels, is_first=False, omega_0=30)
                 )
             else:  # 3D
                 self.model = nn.Sequential(
                     SineLayer(in_dim, in_dim * 2, is_first=True, omega_0=30.),
-                    SineLayer(in_dim * 2, self.img_size[0] // self.patch_size[0] * self.patch_size[0] * in_channels, is_first=False, omega_0=30)
+                    SineLayer(in_dim * 2, self.img_size[0] // self.patch_size[0] * self.patch_size[0] * out_channels, is_first=False, omega_0=30)
                 )
         elif to_pixel == 'identity':
             self.model = nn.Identity()
@@ -243,13 +243,13 @@ class ToPixel(nn.Module):
 
     def unpatchify(self, x):
         """
-        x: (N, L, patch_size**2 * in_channels) for 2D 
-        (N, L, patch_size**3 * in_channels) for 3D
-        imgs: (N, in_channels, H, W) for 2D 
-            (N, in_channels, D, H, W) for 3D
+        x: (N, L, patch_size**2 * out_channels) for 2D 
+        (N, L, patch_size**3 * out_channels) for 3D
+        imgs: (N, out_channels, H, W) for 2D 
+            (N, out_channels, D, H, W) for 3D
         """
         B = x.shape[0]
-        C = self.in_channels
+        C = self.out_channels
 
         if self.dims == 2:
             p_h, p_w = self.patch_size
@@ -280,17 +280,16 @@ class ToPixel(nn.Module):
         elif self.to_pixel_name == 'siren':
             x = self.model(x)
             if self.dims == 2:
-                x = x.view(x.shape[0], self.in_channels, self.patch_size[0] * int(self.num_patches ** 0.5),
+                x = x.view(x.shape[0], self.out_channels, self.patch_size[0] * int(self.num_patches ** 0.5),
                            self.patch_size[0] * int(self.num_patches ** 0.5))
             else:  # 3D
                 d = self.img_size[0] // self.patch_size[0]
                 h = self.img_size[1] // self.patch_size[1]
                 w = self.img_size[2] // self.patch_size[2]
-                x = x.view(x.shape[0], self.in_channels, self.patch_size[0] * d,
+                x = x.view(x.shape[0], self.out_channels, self.patch_size[0] * d,
                            self.patch_size[1] * h, self.patch_size[2] * w)
         elif self.to_pixel_name == 'conv':
             x = self.model(x)
         elif self.to_pixel_name == 'identity':
             x = self.model(x)
-            x = self.unpatchify(x)
         return x

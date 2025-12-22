@@ -104,7 +104,7 @@ You can think of TiTOK as a learned, low-dimensional interface into a richer cod
 
 
 class TiTok(nn.Module):
-    def __init__(self, image_size=256,
+    def __init__(self, img_size=256,
                  patch_size=16, 
                  hidden_size=768,
                  in_channels=3,
@@ -117,14 +117,20 @@ class TiTok(nn.Module):
                  quantizer_loss_weight=1.0,
                  pixel_vqgan: Optional[VQModel] = None, # VQModel = PretrainedTokenizer("/vol/miltank/users/bubeckn/1d-tokenizer/maskgit-vqgan-imagenet-f16-256.bin"), 
                  stage="1", 
-                 quantize_mode="vq"):
+                 quantize_mode="vq",
+                 dims=2):
         super().__init__()
         # This should be False for stage1 and True for stage2.
         self.stage=stage
         assert stage in ["1", "2", "e2e"]
-        assert len(image_size) == len(patch_size)
+        if isinstance(img_size, int):
+            img_size = (img_size,) * dims
+        if isinstance(patch_size, int):
+            patch_size = (patch_size,) * dims
+
+        assert len(img_size) == len(patch_size)
         assert not (self.stage == "1" and pixel_vqgan is None), "For stage 1, pixel_vqgan is required."
-        self.dims = len(image_size)
+        self.dims = len(img_size)
 
         print(f"num latent tokens: {num_latent_tokens}")
         self.quantize_mode = quantize_mode
@@ -135,7 +141,7 @@ class TiTok(nn.Module):
             raise ValueError("Only support finetune_decoder with vq quantization for now.")
                 
         self.encoder = TiTokEncoder(
-            image_size=image_size,
+            img_size=img_size,
             in_channels=in_channels,
             patch_size=patch_size,
             hidden_size=hidden_size,
@@ -146,10 +152,11 @@ class TiTok(nn.Module):
             quantize_mode=quantize_mode,
             is_legacy= not self.stage == "e2e",
         )
+        cs = pixel_vqgan.quantize.n_e if pixel_vqgan is not None and self.stage != "e2e" else codebook_size
         self.decoder = TiTokDecoder(
-            image_size=image_size,
+            img_size=img_size,
             out_channels=out_channels,
-            codebook_size=pixel_vqgan.quantize.n_e,
+            codebook_size=cs,
             patch_size=patch_size,
             hidden_size=hidden_size,
             depth=depth,
@@ -200,8 +207,9 @@ class TiTok(nn.Module):
                 "z_channels": 256}))
             
         # Freeze the pixel_vqgan is frozen when loaded
-        self.pixel_vqgan = pixel_vqgan.eval()
-        self.pixel_vqgan.requires_grad_(False)
+        if pixel_vqgan is not None:
+            self.pixel_vqgan = pixel_vqgan.eval()
+            self.pixel_vqgan.requires_grad_(False)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""

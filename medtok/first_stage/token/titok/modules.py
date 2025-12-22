@@ -216,9 +216,9 @@ def _expand_token(token, batch_size: int):
 
 
 class TiTokEncoder(nn.Module):
-    def __init__(self, image_size, in_channels=3, patch_size=16, hidden_size=768, depth=12, num_heads=12, num_latent_tokens=64, token_size=12, quantize_mode="vq", is_legacy=True, mlp_ratio=4.0):
+    def __init__(self, img_size, in_channels=3, patch_size=16, hidden_size=768, depth=12, num_heads=12, num_latent_tokens=64, token_size=12, quantize_mode="vq", is_legacy=True, mlp_ratio=4.0):
         super().__init__()
-        self.image_size = image_size
+        self.img_size = img_size
         self.patch_size = patch_size
         self.hidden_size = hidden_size
         self.depth = depth
@@ -227,14 +227,14 @@ class TiTokEncoder(nn.Module):
         self.token_size = token_size
 
         # Determine spatial dimensions (2D or 3D)
-        if isinstance(self.image_size, int):
+        if isinstance(self.img_size, int):
             self.dims = 2
-            self.image_size = (self.image_size, self.image_size)
-        elif isinstance(self.image_size, (list, tuple)):
-            self.dims = len(self.image_size)
-            self.image_size = tuple(self.image_size)
+            self.img_size = (self.img_size, self.img_size)
+        elif isinstance(self.img_size, (list, tuple)):
+            self.dims = len(self.img_size)
+            self.img_size = tuple(self.img_size)
         else:
-            raise ValueError(f"Unknown image_size type: {type(self.image_size)}")
+            raise ValueError(f"Unknown img_size type: {type(self.img_size)}")
 
         if isinstance(self.patch_size, int):
             self.patch_size = (self.patch_size,) * self.dims
@@ -246,7 +246,7 @@ class TiTokEncoder(nn.Module):
             raise ValueError(f"Unknown patch_size type: {type(self.patch_size)}")
 
         # Compute grid size (tuple for each spatial dim)
-        self.grid_size = tuple(img // p for img, p in zip(self.image_size, self.patch_size))
+        self.grid_size = tuple(img // p for img, p in zip(self.img_size, self.patch_size))
         self.n_patches = int(np.prod(self.grid_size))
 
         if quantize_mode == "vae":
@@ -254,7 +254,7 @@ class TiTokEncoder(nn.Module):
 
         self.is_legacy = is_legacy
 
-        self.patch_embed = PatchEmbed(to_embed='conv', img_size=self.image_size, patch_size=self.patch_size, in_chans=in_channels, embed_dim=self.hidden_size)
+        self.patch_embed = PatchEmbed(to_embed='conv', img_size=self.img_size, patch_size=self.patch_size, in_chans=in_channels, embed_dim=self.hidden_size)
 
         scale = self.hidden_size ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(1, self.hidden_size))
@@ -325,7 +325,7 @@ class TiTokEncoder(nn.Module):
 class TiTokDecoder(nn.Module):
     def __init__(
         self, 
-        image_size, 
+        img_size, 
         codebook_size,
         out_channels=3, 
         patch_size=16, 
@@ -340,19 +340,19 @@ class TiTokDecoder(nn.Module):
     ):
         super().__init__()
         # Set up image and patch sizes and determine spatial dims (2d vs 3d)
-        if isinstance(image_size, int):
-            self.image_size = (image_size, image_size)
+        if isinstance(img_size, int):
+            self.img_size = (img_size, img_size)
         else:
-            self.image_size = tuple(image_size)
+            self.img_size = tuple(img_size)
         if isinstance(patch_size, int):
-            self.patch_size = (patch_size,) * len(self.image_size)
+            self.patch_size = (patch_size,) * len(self.img_size)
         else:
             self.patch_size = tuple(patch_size)
-        self.dims = len(self.image_size)
+        self.dims = len(self.img_size)
         assert self.dims in [2, 3], "Only 2D and 3D supported"
 
         # Compute grid size for each spatial dim
-        self.grid_size_tuple = tuple([i // p for i, p in zip(self.image_size, self.patch_size)])
+        self.grid_size_tuple = tuple([i // p for i, p in zip(self.img_size, self.patch_size)])
         self.grid_size = self.grid_size_tuple  # tuple
         self.n_grid = int(np.prod(self.grid_size_tuple))
 

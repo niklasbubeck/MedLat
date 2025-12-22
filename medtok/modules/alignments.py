@@ -344,7 +344,7 @@ class DinoAlignment(AlignmentModule):
         self,
         decoder: nn.Module,
         codebook_embed_dim: int,
-        image_size: int,
+        img_size: int,
         repa_model_name: str = 'vit_large_patch14_dinov2.lvd142m',
         repa_patch_size: int = 14,
         use_movq: bool = False,
@@ -355,7 +355,7 @@ class DinoAlignment(AlignmentModule):
             raise RuntimeError("timm is required for DinoAlignment. Please install timm.")
         
         # Instantiate the repa/dinov2 model
-        self.repa_model = create_model(repa_model_name, pretrained=True, img_size=image_size, patch_size=repa_patch_size)
+        self.repa_model = create_model(repa_model_name, pretrained=True, img_size=img_size, patch_size=repa_patch_size)
         for p in self.repa_model.parameters():
             p.requires_grad = False
         self.repa_model.eval()
@@ -416,7 +416,7 @@ class ClipAlignment(AlignmentModule):
         self,
         decoder: nn.Module,
         codebook_embed_dim: int,
-        image_size: int,
+        img_size: int,
         clip_model_name: str = 'vit_so400m_patch14_siglip_gap_224',
         clip_patch_size: int = 14,
         use_movq: bool = False,
@@ -427,7 +427,7 @@ class ClipAlignment(AlignmentModule):
             raise RuntimeError("timm is required for ClipAlignment. Please install timm.")
         
         # Instantiate the CLIP model
-        self.clip_model = create_model(clip_model_name, pretrained=True, img_size=image_size, patch_size=clip_patch_size)
+        self.clip_model = create_model(clip_model_name, pretrained=True, img_size=img_size, patch_size=clip_patch_size)
         for p in self.clip_model.parameters():
             p.requires_grad = False
         # Don't set dynamic_img_size=True as it expects spatial format from patch_embed

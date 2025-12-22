@@ -366,344 +366,6 @@ def MSRQ_f16_d32_e4096(
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
 
-@register_model("discrete.lfq.f4_d3_b13") #matches bits for codebook of size 8192 -> (2^13)
-def LFQ_f4_d3_b13(
-    img_size=256,
-    dims=2,
-    double_z=False,
-    z_channels=3,
-    in_channels=3,
-    out_ch=3,
-    ch=128,
-    ch_mult=[1, 2, 4],
-    num_res_blocks=2,
-    attn_resolutions=[],
-    dropout=0.0,
-
-    token_bits=13,   
-    commitment_cost=0.25,
-    entropy_loss_weight=0.2,
-    entropy_loss_temperature=0.01,
-    entropy_gamma=1.0,
-    **kwargs
-):
-    encoder = Encoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    decoder = Decoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    quantizer = LookupFreeQuantizer(
-        token_bits=token_bits,
-        commitment_cost=commitment_cost,
-        entropy_loss_weight=entropy_loss_weight,
-        entropy_loss_temperature=entropy_loss_temperature,
-        entropy_gamma=entropy_gamma,
-    )
-    return VQModel(encoder, decoder, quantizer, **kwargs)
-
-@register_model("discrete.lfq.f8_d4_b14")
-def LFQ_f8_d4_b14(
-    img_size=256,
-    dims=2,
-    double_z=False,
-    z_channels=4,
-    in_channels=3,
-    out_ch=3,
-    ch=128,
-    ch_mult=[1, 2, 2, 4],
-    num_res_blocks=2,
-    attn_resolutions=[32],
-    dropout=0.0,
-
-    token_bits=14,   
-    commitment_cost=0.25,
-    entropy_loss_weight=0.2,
-    entropy_loss_temperature=0.01,
-    entropy_gamma=1.0,
-    **kwargs
-):
-    encoder = Encoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    decoder = Decoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    quantizer = LookupFreeQuantizer(
-        token_bits=token_bits,
-        commitment_cost=commitment_cost,
-        entropy_loss_weight=entropy_loss_weight,
-        entropy_loss_temperature=entropy_loss_temperature,
-        entropy_gamma=entropy_gamma,
-    )
-    return VQModel(encoder, decoder, quantizer, **kwargs)
-
-@register_model("discrete.lfq.f16_d8_b14")
-def LFQ_f16_d8_b14(
-    img_size=256,
-    dims=2,
-    double_z=False,
-    z_channels=8,
-    in_channels=3,
-    out_ch=3,
-    ch=128,
-    ch_mult=[1, 1, 2, 2, 4],
-    num_res_blocks=2,
-    attn_resolutions=[16],
-    dropout=0.0,
-
-    token_bits=14,   
-    commitment_cost=0.25,
-    entropy_loss_weight=0.2,
-    entropy_loss_temperature=0.01,
-    entropy_gamma=1.0,
-    **kwargs
-):
-    encoder = Encoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    decoder = Decoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    quantizer = LookupFreeQuantizer(
-        token_bits=token_bits,
-        commitment_cost=commitment_cost,
-        entropy_loss_weight=entropy_loss_weight,
-        entropy_loss_temperature=entropy_loss_temperature,
-        entropy_gamma=entropy_gamma,
-    )
-    return VQModel(encoder, decoder, quantizer, **kwargs)
-
-
-@register_model("discrete.bsq.f4_d3_b13") #matches bits for codebook of size 8192 -> (2^13)
-def BSQ_f4_d3_b13(
-    img_size=256,
-    dims=2,
-    double_z=False,
-    z_channels=3,
-    in_channels=3,
-    out_ch=3,
-    ch=128,
-    ch_mult=[1, 2, 4],
-    num_res_blocks=2,
-    attn_resolutions=[],
-    dropout=0.0,
-
-    token_bits=13,   
-    commitment_cost=0.25,
-    entropy_loss_weight=0.2,
-    entropy_loss_temperature=0.01,
-    entropy_gamma=1.0,
-    **kwargs
-):
-    encoder = Encoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    decoder = Decoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    quantizer = BinarySphericalQuantizer(
-        token_bits=token_bits,
-        commitment_cost=commitment_cost,
-        entropy_loss_weight=entropy_loss_weight,
-        entropy_loss_temperature=entropy_loss_temperature,
-        entropy_gamma=entropy_gamma,
-    )
-    return VQModel(encoder, decoder, quantizer, **kwargs)
-
-@register_model("discrete.bsq.f8_d4_b14")
-def BSQ_f8_d4_b14(
-    img_size=256,
-    dims=2,
-    double_z=False,
-    z_channels=4,
-    in_channels=3,
-    out_ch=3,
-    ch=128,
-    ch_mult=[1, 2, 2, 4],
-    num_res_blocks=2,
-    attn_resolutions=[32],
-    dropout=0.0,
-
-    token_bits=14,   
-    commitment_cost=0.25,
-    entropy_loss_weight=0.2,
-    entropy_loss_temperature=0.01,
-    entropy_gamma=1.0,
-    **kwargs
-):
-    encoder = Encoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    decoder = Decoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    quantizer = BinarySphericalQuantizer(
-        token_bits=token_bits,
-        commitment_cost=commitment_cost,
-        entropy_loss_weight=entropy_loss_weight,
-        entropy_loss_temperature=entropy_loss_temperature,
-        entropy_gamma=entropy_gamma,
-    )
-    return VQModel(encoder, decoder, quantizer, **kwargs)
-
-@register_model("discrete.bsq.f16_d8_b14")
-def BSQ_f16_d8_b14(
-    img_size=256,
-    dims=2,
-    double_z=False,
-    z_channels=8,
-    in_channels=3,
-    out_ch=3,
-    ch=128,
-    ch_mult=[1, 1, 2, 2, 4],
-    num_res_blocks=2,
-    attn_resolutions=[16],
-    dropout=0.0,
-
-    token_bits=14,   
-    commitment_cost=0.25,
-    entropy_loss_weight=0.2,
-    entropy_loss_temperature=0.01,
-    entropy_gamma=1.0,
-    **kwargs
-):
-    encoder = Encoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    decoder = Decoder(
-        img_size=img_size,
-        dims=dims,
-        double_z=double_z,
-        z_channels=z_channels,
-        in_channels=in_channels,
-        out_ch=out_ch,
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout
-    )
-    quantizer = BinarySphericalQuantizer(
-        token_bits=token_bits,
-        commitment_cost=commitment_cost,
-        entropy_loss_weight=entropy_loss_weight,
-        entropy_loss_temperature=entropy_loss_temperature,
-        entropy_gamma=entropy_gamma,
-    )
-    return VQModel(encoder, decoder, quantizer, **kwargs)
-
-
 @register_model(f"discrete.lfq.f16_d10_b10")
 def LFQ_f16_d10_b10(
         # --- encoder/decoder config ---
@@ -760,6 +422,14 @@ def LFQ_f16_d10_b10(
         entropy_gamma=entropy_gamma,
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model(f"discrete.lfq.f8_d10_b10")
+def LFQ_f8_d10_b10(**kwargs):
+    return LFQ_f16_d10_b10(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.lfq.f4_d10_b10")
+def LFQ_f4_d10_b10(**kwargs):
+    return LFQ_f16_d10_b10(ch_mult=[1, 2, 4], **kwargs)
 
 @register_model(f"discrete.lfq.f16_d12_b12")
 def LFQ_f16_d12_b12(
@@ -818,6 +488,14 @@ def LFQ_f16_d12_b12(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
+@register_model(f"discrete.lfq.f8_d12   _b12")
+def LFQ_f8_d12_b12(**kwargs):
+    return LFQ_f16_d12_b12(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.lfq.f4_d12_b12")
+def LFQ_f4_d12_b12(**kwargs):
+    return LFQ_f16_d12_b12(ch_mult=[1, 2, 4], **kwargs)
+
 @register_model(f"discrete.lfq.f16_d14_b14")
 def LFQ_f16_d14_b14(
         # --- encoder/decoder config ---
@@ -874,6 +552,15 @@ def LFQ_f16_d14_b14(
         entropy_gamma=entropy_gamma,
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
+@register_model(f"discrete.lfq.f8_d14_b14")
+def LFQ_f8_d14_b14(**kwargs):
+    return LFQ_f16_d14_b14(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.lfq.f4_d14_b14")
+def LFQ_f4_d14_b14(**kwargs):
+    return LFQ_f16_d14_b14(ch_mult=[1, 2, 4], **kwargs)
 
 @register_model(f"discrete.lfq.f16_d16_b16")
 def LFQ_f16_d16_b16(
@@ -932,6 +619,14 @@ def LFQ_f16_d16_b16(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
+@register_model(f"discrete.lfq.f8_d16_b16")
+def LFQ_f8_d16_b16(**kwargs):
+    return LFQ_f16_d16_b16(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.lfq.f4_d16_b16")
+def LFQ_f4_d16_b16(**kwargs):
+    return LFQ_f16_d16_b16(ch_mult=[1, 2, 4], **kwargs)
+
 @register_model(f"discrete.lfq.f16_d18_b18")
 def LFQ_f16_d18_b18(
         # --- encoder/decoder config ---
@@ -989,6 +684,13 @@ def LFQ_f16_d18_b18(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
+@register_model(f"discrete.lfq.f8_d18_b18")
+def LFQ_f8_d18_b18(**kwargs):
+    return LFQ_f16_d18_b18(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.lfq.f4_d18_b18")
+def LFQ_f4_d18_b18(**kwargs):
+    return LFQ_f16_d18_b18(ch_mult=[1, 2, 4], **kwargs)
 
 @register_model("discrete.simple_qinco.f4_d3_e8192")
 def SimpleQINCo_f4_d3_e8192(
@@ -1593,166 +1295,328 @@ def FSQ_f16_d256_e16(**kwargs):
     return FSQ_f16_d256_e8(levels=[8, 8, 8, 5, 5, 5], **kwargs)
 
 
-# @register_model(f"discrete.vit_xsmall")
-# def ViTVQModel_XSmall(
-#         # --- encoder/decoder (ViT) config ---
-#         image_size: int,
-#         patch_size=None,
-#         z_channels=256,
-#         dim=256,
-#         depth=4,
-#         num_heads=4,
-#         mlp_ratio=4,
-#         channels=3,
-#         # --- quantizer config ---
-#         n_e=8192,
-#         e_dim=32,
-#         beta=0.25,
-#         remap=None,
-#         **kwargs
-#     ):
-#     encoder = ViTEncoder(
-#         image_size=image_size,
-#         patch_size=8 if patch_size is None else patch_size,
-#         z_channels=z_channels,
-#         dim=dim,
-#         depth=depth,
-#         num_heads=num_heads,
-#         mlp_ratio=mlp_ratio,
-#         channels=channels
-#     )
-#     decoder = ViTDecoder(
-#         image_size=image_size,
-#         patch_size=8 if patch_size is None else patch_size,
-#         z_channels=z_channels,
-#         dim=dim,
-#         depth=depth,
-#         num_heads=num_heads,
-#         mlp_ratio=mlp_ratio,
-#         channels=channels
-#     )
-#     quantizer = ViTVectorQuantizer(n_e=n_e, e_dim=e_dim, beta=beta, remap=remap)
-#     return VQModel(encoder, decoder, quantizer, vit=True, **kwargs)
+@register_model(f"discrete.bsq.f16_d10_b10")
+def BSQ_f16_d10_b10(
+        # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=10,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        token_bits=10,
+        commitment_cost=0.25,
+        entropy_loss_weight=0.2,
+        entropy_loss_temperature=0.01,
+        entropy_gamma=1.0,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = BinarySphericalQuantizer(
+        token_bits=token_bits,
+        commitment_cost=commitment_cost,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
 
-# @register_model(f"{_REGISTRY_PREFIX}vit_small")
-# def ViTVQModel_Small(
-#         # --- encoder/decoder (ViT) config ---
-#         image_size: int,
-#         patch_size=None,
-#         z_channels=512,
-#         dim=512,
-#         depth=8,
-#         num_heads=8,
-#         mlp_ratio=4,
-#         channels=3,
-#         # --- quantizer config ---
-#         n_e=8192,
-#         e_dim=32,
-#         beta=0.25,
-#         remap=None,
-#         **kwargs
-#     ):
-#     encoder = EncoderVisionTransformer(
-#         image_size=image_size,
-#         patch_size=8 if patch_size is None else patch_size,
-#         z_channels=z_channels,
-#         dim=dim,
-#         depth=depth,
-#         num_heads=num_heads,
-#         mlp_ratio=mlp_ratio,
-#         channels=channels
-#     )
-#     decoder = DecoderVisionTransformer(
-#         image_size=image_size,
-#         patch_size=8 if patch_size is None else patch_size,
-#         z_channels=z_channels,
-#         dim=dim,
-#         depth=depth,
-#         num_heads=num_heads,
-#         mlp_ratio=mlp_ratio,
-#         channels=channels
-#     )
-#     quantizer = ViTVectorQuantizer(n_e=n_e, e_dim=e_dim, beta=beta, remap=remap)
-#     return VQModel(encoder, decoder, quantizer, vit=True, **kwargs)
+@register_model(f"discrete.bsq.f8_d10_b10")
+def BSQ_f8_d10_b10(**kwargs):
+    return BSQ_f16_d10_b10(ch_mult=[1, 2, 2, 4], **kwargs)
 
-# @register_model(f"{_REGISTRY_PREFIX}vit_base")
-# def ViTVQModel_Base(
-#         # --- encoder/decoder (ViT) config ---
-#         image_size: int,
-#         patch_size=None,
-#         z_channels=768,
-#         dim=768,
-#         depth=12,
-#         num_heads=12,
-#         mlp_ratio=4,
-#         channels=3,
-#         # --- quantizer config ---
-#         n_e=8192,
-#         e_dim=32,
-#         beta=0.25,
-#         remap=None,
-#         **kwargs
-#     ):
-#     encoder = EncoderVisionTransformer(
-#         image_size=image_size,
-#         patch_size=8 if patch_size is None else patch_size,
-#         z_channels=z_channels,
-#         dim=dim,
-#         depth=depth,
-#         num_heads=num_heads,
-#         mlp_ratio=mlp_ratio,
-#         channels=channels
-#     )
-#     decoder = DecoderVisionTransformer(
-#         image_size=image_size,
-#         patch_size=8 if patch_size is None else patch_size,
-#         z_channels=z_channels,
-#         dim=dim,
-#         depth=depth,
-#         num_heads=num_heads,
-#         mlp_ratio=mlp_ratio,
-#         channels=channels
-#     )
-#     quantizer = ViTVectorQuantizer(n_e=n_e, e_dim=e_dim, beta=beta, remap=remap)
-#     return VQModel(encoder, decoder, quantizer, vit=True, **kwargs)
+@register_model(f"discrete.bsq.f4_d10_b10")
+def BSQ_f4_d10_b10(**kwargs):
+    return BSQ_f16_d10_b10(ch_mult=[1, 2, 4], **kwargs)
 
-# @register_model(f"{_REGISTRY_PREFIX}vit_large")
-# def ViTVQModel_Large(
-#         # --- encoder/decoder (ViT) config ---
-#         image_size: int,
-#         patch_size=None,
-#         z_channels=1280,
-#         dim=1280,
-#         depth=32,
-#         num_heads=16,
-#         mlp_ratio=4,
-#         channels=3,
-#         # --- quantizer config ---
-#         n_e=8192,
-#         e_dim=32,
-#         beta=0.25,
-#         remap=None,
-#         **kwargs
-#     ):
-#     encoder = EncoderVisionTransformer(
-#         image_size=image_size,
-#         patch_size=8 if patch_size is None else patch_size,
-#         z_channels=z_channels,
-#         dim=dim,
-#         depth=depth,
-#         num_heads=num_heads,
-#         mlp_ratio=mlp_ratio,
-#         channels=channels
-#     )
-#     decoder = DecoderVisionTransformer(
-#         image_size=image_size,
-#         patch_size=8 if patch_size is None else patch_size,
-#         z_channels=z_channels,
-#         dim=dim,
-#         depth=depth,
-#         num_heads=num_heads,
-#         mlp_ratio=mlp_ratio,
-#         channels=channels
-#     )
-#     quantizer = ViTVectorQuantizer(n_e=n_e, e_dim=e_dim, beta=beta, remap=remap)
-#     return VQModel(encoder, decoder, quantizer, vit=True, **kwargs)
+@register_model(f"discrete.bsq.f16_d12_b12")
+def BSQ_f16_d12_b12(
+        # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=12,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        token_bits=12,
+        commitment_cost=0.25,
+        entropy_loss_weight=0.2,
+        entropy_loss_temperature=0.01,
+        entropy_gamma=1.0,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = BinarySphericalQuantizer(
+        token_bits=token_bits,
+        commitment_cost=commitment_cost,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model(f"discrete.bsq.f8_d12_b12")
+def BSQ_f8_d12_b12(**kwargs):
+    return BSQ_f16_d12_b12(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.bsq.f4_d12_b12")
+def BSQ_f4_d12_b12(**kwargs):
+    return BSQ_f16_d12_b12(ch_mult=[1, 2, 4], **kwargs)
+
+@register_model(f"discrete.bsq.f16_d14_b14")
+def BSQ_f16_d14_b14(
+        # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=14,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        token_bits=14,
+        commitment_cost=0.25,
+        entropy_loss_weight=0.2,
+        entropy_loss_temperature=0.01,
+        entropy_gamma=1.0,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = BinarySphericalQuantizer(
+        token_bits=token_bits,
+        commitment_cost=commitment_cost,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
+@register_model(f"discrete.bsq.f8_d14_b14")
+def BSQ_f8_d14_b14(**kwargs):
+    return BSQ_f16_d14_b14(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.bsq.f4_d14_b14")
+def BSQ_f4_d14_b14(**kwargs):
+    return BSQ_f16_d14_b14(ch_mult=[1, 2, 4], **kwargs)
+
+@register_model(f"discrete.bsq.f16_d16_b16")
+def BSQ_f16_d16_b16(
+        # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=16,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        token_bits=16,
+        commitment_cost=0.25,
+        entropy_loss_weight=0.2,
+        entropy_loss_temperature=0.01,
+        entropy_gamma=1.0,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = BinarySphericalQuantizer(
+        token_bits=token_bits,
+        commitment_cost=commitment_cost,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model(f"discrete.bsq.f8_d16_b16")
+def BSQ_f8_d16_b16(**kwargs):
+    return BSQ_f16_d16_b16(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.bsq.f4_d16_b16")
+def BSQ_f4_d16_b16(**kwargs):
+    return BSQ_f16_d16_b16(ch_mult=[1, 2, 4], **kwargs)
+
+@register_model(f"discrete.bsq.f16_d18_b18")
+def BSQ_f16_d18_b18(
+        # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=18,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        token_bits=18,
+        commitment_cost=0.25,
+        entropy_loss_weight=0.2,
+        entropy_loss_temperature=0.01,
+        entropy_gamma=1.0,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = BinarySphericalQuantizer(
+        token_bits=token_bits,
+        commitment_cost=commitment_cost,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model(f"discrete.bsq.f8_d18_b18")
+def BSQ_f8_d18_b18(**kwargs):
+    return BSQ_f16_d18_b18(ch_mult=[1, 2, 2, 4], **kwargs)
+
+@register_model(f"discrete.bsq.f4_d18_b18")
+def BSQ_f4_d18_b18(**kwargs):
+    return BSQ_f16_d18_b18(ch_mult=[1, 2, 4], **kwargs)

@@ -38,8 +38,9 @@ def mean_flat(x):
 
 class MaskAEModel(nn.Module):
     def __init__(self, 
-                 image_size: int = 256,
-                 base_image_size: int = 256,
+                 img_size: int = 256,
+                 patch_size: int = 16,
+                 base_img_size: int = 256,
                  codebook_embed_dim: int = 32,
                  dec_use_movq: bool = False,
                  num_latent_tokens: int = 128,
@@ -52,8 +53,6 @@ class MaskAEModel(nn.Module):
                  dec_num_heads: int = 12,
                  enc_mlp_ratio: float = 4.,
                  dec_mlp_ratio: float = 4.,
-                 enc_patch_size: int = 16,
-                 dec_patch_size: int = 16,
                  enc_drop_path_rate: float = 0.0,
                  dec_drop_path_rate: float = 0.05,
                  dec_cls_token: bool = False,
@@ -75,8 +74,8 @@ class MaskAEModel(nn.Module):
                  aux_biomed_clip_dec: bool = False,
                  ):
         super().__init__()
-        self.image_size = image_size
-        self.base_image_size = base_image_size
+        self.img_size = img_size
+        self.base_img_size = base_img_size
         self.dec_use_movq = dec_use_movq
         self.codebook_embed_dim = codebook_embed_dim
         self.num_latent_tokens = num_latent_tokens
@@ -89,8 +88,7 @@ class MaskAEModel(nn.Module):
         self.dec_num_heads = dec_num_heads
         self.enc_mlp_ratio = enc_mlp_ratio
         self.dec_mlp_ratio = dec_mlp_ratio
-        self.enc_patch_size = enc_patch_size
-        self.dec_patch_size = dec_patch_size
+        self.patch_size = patch_size
         self.enc_drop_path_rate = enc_drop_path_rate
         self.dec_drop_path_rate = dec_drop_path_rate
         self.dec_cls_token = dec_cls_token
@@ -113,8 +111,8 @@ class MaskAEModel(nn.Module):
 
         self.encoder = MAETokViTEncoder(
             in_channels=3,
-            img_size=self.image_size,
-            patch_size=self.enc_patch_size,
+            img_size=self.img_size,
+            patch_size=self.patch_size,
             embed_dim=self.enc_embed_dim,
             depth=self.enc_depth,
             num_heads=self.enc_num_heads,
@@ -123,14 +121,14 @@ class MaskAEModel(nn.Module):
             use_ape=self.use_ape, use_rope=self.use_rope, rope_mixed=self.rope_mixed, rope_theta=self.rope_theta,
             token_drop=self.enc_token_drop,
             token_drop_max=self.enc_token_drop_max,
-            base_img_size=self.base_image_size,
+            base_img_size=self.base_img_size,
             drop_path_rate=self.enc_drop_path_rate
         )
 
         self.decoder = MAETokViTDecoder(
             in_channels=3,
-            img_size=self.image_size,
-            patch_size=self.dec_patch_size,
+            img_size=self.img_size,
+            patch_size=self.patch_size,
             embed_dim=self.dec_embed_dim,
             depth=self.dec_depth,
             num_heads=self.dec_num_heads,
@@ -140,7 +138,7 @@ class MaskAEModel(nn.Module):
             cls_token=self.dec_cls_token,
             codebook_embed_dim=self.codebook_embed_dim,
             to_pixel=self.to_pixel,
-            base_img_size=self.base_image_size,
+            base_img_size=self.base_img_size,
             use_movq=self.dec_use_movq,
             drop_path_rate=self.dec_drop_path_rate
         )           
@@ -162,8 +160,8 @@ class MaskAEModel(nn.Module):
                 depth=12,
                 num_heads=6,
                 mlp_ratio=4.0,
-                img_size=self.image_size,
-                patch_size=self.dec_patch_size,
+                img_size=self.img_size,
+                patch_size=self.patch_size,
                 drop_path_rate=0.0,
                 num_latent_tokens=self.num_latent_tokens,
                 to_pixel='identity',
@@ -173,7 +171,7 @@ class MaskAEModel(nn.Module):
                 use_rope=self.use_rope,
                 use_ape=self.use_ape,
                 cls_token=self.aux_dec_cls_token,
-                base_img_size=self.base_image_size,
+                base_img_size=self.base_img_size,
                 use_movq=use_movq_hog,
             )
             self.aux_hog_decoder = HOGAlignment(
@@ -193,7 +191,7 @@ class MaskAEModel(nn.Module):
                 depth=12,
                 num_heads=6,
                 mlp_ratio=4.0,
-                img_size=self.image_size,
+                img_size=self.img_size,
                 patch_size=self.repa_patch_size,
                 drop_path_rate=0.0,
                 num_latent_tokens=self.num_latent_tokens,
@@ -204,13 +202,13 @@ class MaskAEModel(nn.Module):
                 use_rope=self.use_rope,
                 use_ape=self.use_ape,
                 cls_token=self.aux_dec_cls_token,
-                base_img_size=self.base_image_size,
+                base_img_size=self.base_img_size,
                 use_movq=use_movq_dino,
             )
             self.aux_dino_decoder = DinoAlignment(
                 decoder=aux_dino_decoder_model,
                 codebook_embed_dim=self.codebook_embed_dim,
-                image_size=self.image_size,
+                img_size=self.img_size,
                 repa_model_name=self.repa_model,
                 repa_patch_size=self.repa_patch_size,
                 use_movq=use_movq_dino,
@@ -227,7 +225,7 @@ class MaskAEModel(nn.Module):
                 depth=12,
                 num_heads=6,
                 mlp_ratio=4.0,
-                img_size=self.image_size,
+                img_size=self.img_size,
                 patch_size=self.repa_patch_size,
                 drop_path_rate=0.0,
                 num_latent_tokens=self.num_latent_tokens,
@@ -238,13 +236,13 @@ class MaskAEModel(nn.Module):
                 use_rope=self.use_rope,
                 use_ape=self.use_ape,
                 cls_token=self.aux_dec_cls_token,
-                base_img_size=self.base_image_size,
+                base_img_size=self.base_img_size,
                 use_movq=use_movq_clip,
             )
             self.aux_clip_decoder = ClipAlignment(
                 decoder=aux_clip_decoder_model,
                 codebook_embed_dim=self.codebook_embed_dim,
-                image_size=self.image_size,
+                img_size=self.img_size,
                 clip_model_name='vit_so400m_patch14_siglip_gap_224',
                 clip_patch_size=self.repa_patch_size,
                 use_movq=use_movq_clip,
@@ -274,7 +272,7 @@ class MaskAEModel(nn.Module):
         #         cls_token=self.aux_dec_cls_token,
         #         codebook_embed_dim=self.codebook_embed_dim,
         #         to_pixel='identity',
-        #         base_img_size=self.base_image_size,
+        #         base_img_size=self.base_img_size,
         #         use_movq=self.dec_use_movq,
         #     )           
         #     self.post_quant_conv_clip = nn.Linear(self.codebook_embed_dim, self.decoder_biomed_clip.embed_dim)

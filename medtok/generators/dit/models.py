@@ -208,7 +208,7 @@ class DiT(nn.Module):
         self.num_heads = num_heads
 
         self.x_embedder = PatchEmbed(to_embed='conv', img_size=img_size, patch_size=patch_size, in_chans=in_channels, embed_dim=hidden_size)
-        self.to_pixel = ToPixel(to_pixel='identity', img_size=img_size, in_channels=self.out_channels, in_dim=hidden_size, patch_size=patch_size)
+        self.to_pixel = ToPixel(to_pixel='identity', img_size=img_size, out_channels=self.out_channels, in_dim=hidden_size, patch_size=patch_size)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         num_patches = self.x_embedder.num_patches
