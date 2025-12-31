@@ -47,7 +47,7 @@ def MAETok_S_512(**kwargs):
     return MAETok_S_128(num_latent_tokens=512, **kwargs)
 
 
-@register_model("token.maetok.b_128",
+@register_model("token.maetok.b_128_p16",
                 code_url="https://github.com/Hhhhhhao/continuous_tokenizer",
                 paper_url="https://arxiv.org/pdf/2502.03444",)
 def MAETok_B_128(img_size: int = 256, 
@@ -61,13 +61,17 @@ def MAETok_B_128(img_size: int = 256,
                  **kwargs):
     return MaskAEModel(img_size=img_size, base_img_size=img_size, patch_size=patch_size, codebook_embed_dim=codebook_embed_dim, num_latent_tokens=num_latent_tokens, aux_hog_dec=aux_hog_dec, aux_dino_dec=aux_dino_dec, aux_clip_dec=aux_clip_dec, aux_biomed_clip_dec=aux_biomed_clip_dec, **kwargs)
 
-@register_model("token.maetok.b_256")
-def MAETok_B_256(**kwargs):
-    return MAETok_B_128(num_latent_tokens=256, **kwargs)
+@register_model("token.maetok.b_128_p8")
+def MAETok_B_128_p8(**kwargs):
+    return MAETok_B_128(num_latent_tokens=128, patch_size=8, **kwargs)
 
-@register_model("token.maetok.b_512")
-def MAETok_B_512(**kwargs):
-    return MAETok_B_128(num_latent_tokens=512, **kwargs)
+@register_model("token.maetok.b_256_p8")
+def MAETok_B_256_p8(**kwargs):
+    return MAETok_B_128(num_latent_tokens=256, patch_size=8, **kwargs)
+
+@register_model("token.maetok.b_512_p8")
+def MAETok_B_512_p8(**kwargs):
+    return MAETok_B_128(num_latent_tokens=512, patch_size=8, **kwargs)
 
 
 @register_model("token.maetok.l_128")

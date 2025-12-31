@@ -31,6 +31,9 @@ class VQModel(nn.Module):
         if self.z_channels is None:
             raise ValueError(f"Encoder {encoder.__class__.__name__} must define z_channels.")
 
+        self.vae_stride = getattr(encoder, "vae_stride", None)
+        if self.vae_stride is None:
+            raise ValueError(f"Encoder {encoder.__class__.__name__} must define vae_stride.")
         self.quant_conv = conv_layer(self.z_channels, self.embed_dim, quant_conv_ks, stride=1, padding=quant_conv_ks//2)
         self.post_quant_conv = conv_layer(self.embed_dim, self.z_channels, quant_conv_ks, stride=1, padding=quant_conv_ks//2)
 
@@ -43,6 +46,7 @@ class VQModel(nn.Module):
                 f"Method {method_name} requires MSRQ features. Please initialize VQModel_Combined with "
                 "v_patch_nums, quant_resi, share_quant_resi, and using_znorm parameters."
             )
+
 
     def lock_parameters(self):
         """Lock the parameters of the model to prevent them from being updated during training."""

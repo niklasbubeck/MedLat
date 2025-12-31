@@ -29,7 +29,7 @@ class MAR(nn.Module):
                  encoder_embed_dim=1024, encoder_depth=16, encoder_num_heads=16,
                  decoder_embed_dim=1024, decoder_depth=16, decoder_num_heads=16,
                  mlp_ratio=4., norm_layer=nn.LayerNorm,
-                 vae_embed_dim=16,
+                 in_channels=16,
                  mask_ratio_min=0.7,
                  label_drop_prob=0.1,
                  class_num=1000,
@@ -46,14 +46,14 @@ class MAR(nn.Module):
 
         # --------------------------------------------------------------------------
         # VAE and patchify specifics
-        self.vae_embed_dim = vae_embed_dim
+        self.in_channels = in_channels
 
         self.img_size = img_size
         self.vae_stride = vae_stride
         self.patch_size = patch_size
         self.seq_h = self.seq_w = img_size // vae_stride // patch_size
         self.seq_len = self.seq_h * self.seq_w
-        self.token_embed_dim = vae_embed_dim * patch_size**2
+        self.token_embed_dim = in_channels * patch_size**2
         self.grad_checkpointing = grad_checkpointing
 
         # --------------------------------------------------------------------------
@@ -146,7 +146,7 @@ class MAR(nn.Module):
     def unpatchify(self, x):
         bsz = x.shape[0]
         p = self.patch_size
-        c = self.vae_embed_dim
+        c = self.in_channels
         h_, w_ = self.seq_h, self.seq_w
 
         x = x.reshape(bsz, h_, w_, c, p, p)
@@ -238,7 +238,8 @@ class MAR(nn.Module):
         loss = self.diffloss(z=z, target=target, mask=mask)
         return loss
 
-    def forward(self, imgs, *args, y=None):  #t is just fake for compatibility
+    def forward(self, imgs, y=None):
+
         # class embed
         class_embedding = self.class_emb(y)
 
@@ -259,10 +260,10 @@ class MAR(nn.Module):
 
         return loss
 
-    def sample(self, bsz, device, *args, tokens=None, mask=None, orders=None, num_iter=16, cfg=1.0, cfg_schedule="linear", labels=None, temperature=1.0, progress=False, **kwargs):
+    def sample(self, bsz, device, *args, tokens=None, mask=None, orders=None, num_iter=16, cfg=1.0, cfg_schedule="linear", y=None, temperature=1.0, progress=False, **kwargs):
 
-        mask = torch.ones(bsz, self.orig_seq_len).to(device) if mask is None else mask
-        tokens = torch.zeros(bsz, self.orig_seq_len, self.token_embed_dim).to(device) if tokens is None else tokens
+        mask = torch.ones(bsz, self.seq_len).to(device) if mask is None else mask
+        tokens = torch.zeros(bsz, self.seq_len, self.token_embed_dim).to(device) if tokens is None else tokens
         orders = self.sample_orders(bsz).to(device) if orders is None else orders 
 
 
@@ -274,8 +275,8 @@ class MAR(nn.Module):
             cur_tokens = tokens.clone()
 
             # class embedding and CFG
-            if labels is not None:
-                class_embedding = self.class_emb(labels)
+            if y is not None:
+                class_embedding = self.class_emb(y)
             else:
                 class_embedding = self.fake_latent.repeat(bsz, 1)
             if not cfg == 1.0:
@@ -326,5 +327,5 @@ class MAR(nn.Module):
 
         # unpatchify
         imgs = self.unpatchify(tokens)
-        return imgs, None
+        return imgs
 

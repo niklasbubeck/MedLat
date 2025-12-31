@@ -1620,3 +1620,205 @@ def BSQ_f8_d18_b18(**kwargs):
 @register_model(f"discrete.bsq.f4_d18_b18")
 def BSQ_f4_d18_b18(**kwargs):
     return BSQ_f16_d18_b18(ch_mult=[1, 2, 4], **kwargs)
+
+@register_model(f"discrete.rqvae.f4_d3_e8192")
+def RQVAE_f4_d3_e8192(
+    # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=3,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        quantizer_class=VectorQuantizer2,
+        num_quantizers=4,
+        n_e=8192,
+        e_dim=3,
+        beta=0.25,
+        shared_codebook=True,
+        quantize_dropout=False,
+        dropout_start_level=0,
+        **kwargs
+):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = ResidualQuantizer(
+        quantizer_class=quantizer_class,
+        num_quantizers=num_quantizers,
+        quantizer_kwargs_list=[
+            {
+                "n_e": n_e,
+                "e_dim": e_dim,
+                "beta": beta,
+            }
+        ] * num_quantizers,
+        shared_codebook=shared_codebook,
+        quantize_dropout=quantize_dropout,
+        dropout_start_level=dropout_start_level,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
+@register_model(f"discrete.rqvae.f8_d4_e16384")
+def RQVAE_f8_d4_e16384(
+    # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=4,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        quantizer_class=VectorQuantizer2,
+        num_quantizers=4,
+        n_e=16384,
+        e_dim=4,
+        beta=0.25,
+        shared_codebook=True,
+        quantize_dropout=False,
+        dropout_start_level=0,
+        **kwargs
+):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = ResidualQuantizer(
+        quantizer_class=quantizer_class,
+        num_quantizers=num_quantizers,
+        quantizer_kwargs_list=[
+            {
+                "n_e": n_e,
+                "e_dim": e_dim,
+                "beta": beta,
+            }
+        ] * num_quantizers,
+        shared_codebook=shared_codebook,
+        quantize_dropout=quantize_dropout,
+        dropout_start_level=dropout_start_level,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model(f"discrete.rqvae.f16_d8_e16384")
+def RQVAE_f16_d8_e16384(
+    # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=8,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[16],
+        dropout=0.0,
+        # --- quantizer config ---
+        quantizer_class=VectorQuantizer2,
+        num_quantizers=4,
+        n_e=16384,
+        e_dim=8,
+        beta=0.25,
+        shared_codebook=True,
+        quantize_dropout=False,
+        dropout_start_level=0,
+        **kwargs
+):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = ResidualQuantizer(
+        quantizer_class=quantizer_class,
+        num_quantizers=num_quantizers,
+        quantizer_kwargs_list=[
+            {
+                "n_e": n_e,
+                "e_dim": e_dim,
+                "beta": beta,
+            }
+        ] * num_quantizers,
+        shared_codebook=shared_codebook,
+        quantize_dropout=quantize_dropout,
+        dropout_start_level=dropout_start_level,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)

@@ -188,29 +188,42 @@ class DiT(nn.Module):
     """
     def __init__(
         self,
-        img_size: list[int] = [32, 32],
-        patch_size: list[int] = [2, 2], # -> 2*2**4 = 16   [2, 2, 2] -> 2*2*2*8 = 64
+        img_size: int | tuple[int, ...] = 256,
+        vae_stride: int | tuple[int, ...] = 16,
+        patch_size: int | tuple[int, ...] = 2,
         in_channels=4,
         hidden_size=1152,
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
-        class_dropout_prob=0.1,
+        label_drop_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
+        dims=2,
     ):
         super().__init__()
-        self.dims = len(img_size)
+        self.dims = dims
+        self.img_size = img_size
+        self.patch_size = patch_size
+        if isinstance(img_size, int):
+            self.img_size = (img_size,) * self.dims
+        if isinstance(patch_size, int):
+            self.patch_size = (patch_size,) * self.dims
+
+        print(f"img_size: {self.img_size}, vae_stride: {vae_stride}")
+        self.img_size = tuple(i // v for i, v in zip(self.img_size, (vae_stride,) * self.dims))
+
+        print(f"img_size: {self.img_size}, patch_size: {self.patch_size}")
+
         self.learn_sigma = learn_sigma
         self.in_channels = in_channels
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
-        self.patch_size = patch_size
         self.num_heads = num_heads
 
-        self.x_embedder = PatchEmbed(to_embed='conv', img_size=img_size, patch_size=patch_size, in_chans=in_channels, embed_dim=hidden_size)
-        self.to_pixel = ToPixel(to_pixel='identity', img_size=img_size, out_channels=self.out_channels, in_dim=hidden_size, patch_size=patch_size)
+        self.x_embedder = PatchEmbed(to_embed='conv', img_size=self.img_size, patch_size=self.patch_size, in_chans=in_channels, embed_dim=hidden_size)
+        self.to_pixel = ToPixel(to_pixel='none', img_size=self.img_size, out_channels=self.out_channels, in_dim=hidden_size, patch_size=self.patch_size)
         self.t_embedder = TimestepEmbedder(hidden_size)
-        self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+        self.y_embedder = LabelEmbedder(num_classes, hidden_size, label_drop_prob)
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
@@ -218,7 +231,7 @@ class DiT(nn.Module):
         self.blocks = nn.ModuleList([
             DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)
         ])
-        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
+        self.final_layer = FinalLayer(hidden_size, self.patch_size, self.out_channels)
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -290,8 +303,8 @@ class DiT(nn.Module):
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.
-        # eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
-        eps, rest = model_out[:, :3], model_out[:, 3:]
+        eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
+        # eps, rest = model_out[:, :3], model_out[:, 3:]
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)

@@ -226,7 +226,7 @@ class ToPixel(nn.Module):
                     SineLayer(in_dim, in_dim * 2, is_first=True, omega_0=30.),
                     SineLayer(in_dim * 2, self.img_size[0] // self.patch_size[0] * self.patch_size[0] * out_channels, is_first=False, omega_0=30)
                 )
-        elif to_pixel == 'identity':
+        elif to_pixel == 'identity' or to_pixel == 'none':
             self.model = nn.Identity()
         else:
             raise NotImplementedError
@@ -292,4 +292,7 @@ class ToPixel(nn.Module):
             x = self.model(x)
         elif self.to_pixel_name == 'identity':
             x = self.model(x)
+        elif self.to_pixel_name == 'none':
+            x = self.model(x)
+            x = self.unpatchify(x)
         return x

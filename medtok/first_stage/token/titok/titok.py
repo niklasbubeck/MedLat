@@ -253,7 +253,7 @@ class TiTok(nn.Module):
                 posteriors = self.quantize(z)
                 z_quantized = posteriors.sample()
                 # result_dict = posteriors
-        return z_quantized, loss
+        return z_quantized, loss, (perplexity, min_encodings, min_encoding_indices)
     
     
     def decode(self, z_quantized): 
@@ -289,7 +289,7 @@ class TiTok(nn.Module):
     
     
     def forward(self, x):
-        z_quantized, loss = self.encode(x)
+        z_quantized, loss, (_, _, _) = self.encode(x)
         decoded = self.decode(z_quantized)
         return decoded, loss
 

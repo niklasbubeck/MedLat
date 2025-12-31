@@ -222,6 +222,7 @@ class Encoder(nn.Module):
         self.ch = ch
         self.temb_ch = 0
         self.num_resolutions = len(ch_mult)
+        self.vae_stride = 2 ** (len(ch_mult) - 1)
         self.num_res_blocks = num_res_blocks
         self.resolution = img_size
         self.in_channels = in_channels

@@ -63,15 +63,15 @@ def TiTok_S_128(
 
 @register_model("token.titok.s_128_e2e")
 def TiTok_S_128_E2E(**kwargs):
-    return TiTok_S_128(num_latent_tokens=128, stage="e2e", **kwargs)
+    return TiTok_S_128(num_latent_tokens=128, patch_size=8, stage="e2e", **kwargs)
 
 @register_model("token.titok.s_256_e2e")
 def TiTok_S_256_E2E(**kwargs):
-    return TiTok_S_128(num_latent_tokens=256, stage="e2e", **kwargs)
+    return TiTok_S_128(num_latent_tokens=256, patch_size=8, stage="e2e", **kwargs)
 
 @register_model("token.titok.s_512_e2e")
 def TiTok_S_512_E2E(**kwargs):
-    return TiTok_S_128(num_latent_tokens=512, stage="e2e", **kwargs)
+    return TiTok_S_128(num_latent_tokens=512, patch_size=8, stage="e2e", **kwargs)
 
 
 @register_model("token.titok.b_64")
@@ -92,17 +92,17 @@ def TiTok_B_64(img_size: int | tuple[int, ...],
                 **kwargs):
     return TiTok(img_size=img_size, patch_size=patch_size, hidden_size=hidden_size, in_channels=in_channels, out_channels=out_channels, depth=depth, num_heads=num_heads, num_latent_tokens=num_latent_tokens, token_size=token_size, codebook_size=codebook_size, quantizer_loss_weight=quantizer_loss_weight, pixel_vqgan=pixel_vqgan, stage=stage, quantize_mode=quantize_mode, **kwargs)
 
-@register_model("token.titok.b_128_e2e")
-def TiTok_B_128_E2E(**kwargs):
-    return TiTok_B_64(num_latent_tokens=128, stage="e2e", **kwargs)
+@register_model("token.titok.b_128_p8_e2e")
+def TiTok_B_128_p8_E2E(**kwargs):
+    return TiTok_B_64(num_latent_tokens=128, patch_size=8, stage="e2e", **kwargs)
 
-@register_model("token.titok.b_256_e2e")
-def TiTok_B_256_E2E(**kwargs):
-    return TiTok_B_64(num_latent_tokens=256, stage="e2e", **kwargs)
+@register_model("token.titok.b_256_p8_e2e")
+def TiTok_B_256_p8_E2E(**kwargs):
+    return TiTok_B_64(num_latent_tokens=256, patch_size=8, stage="e2e", **kwargs)
 
-@register_model("token.titok.b_512_e2e")
-def TiTok_B_512_E2E(**kwargs):
-    return TiTok_B_64(num_latent_tokens=512, stage="e2e", **kwargs)
+@register_model("token.titok.b_512_p8_e2e")
+def TiTok_B_512_p8_E2E(**kwargs):
+    return TiTok_B_64(num_latent_tokens=512, patch_size=8, stage="e2e", **kwargs)
 
 @register_model("token.titok.l_32")
 def TiTok_L_32(img_size: int | tuple[int, ...],

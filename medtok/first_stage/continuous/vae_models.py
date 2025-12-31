@@ -31,6 +31,10 @@ class AutoencoderKL(nn.Module):
         if self.encoder_z_channels is None:
             raise ValueError(f"Encoder {encoder.__class__.__name__} must define z_channels.")
 
+        self.vae_stride = getattr(encoder, "vae_stride", None)
+        if self.vae_stride is None:
+            raise ValueError(f"Encoder {encoder.__class__.__name__} must define vae_stride.")
+
         self.kl_weight = kl_weight
         if embed_dim is None:
             embed_dim = self.encoder_z_channels
@@ -43,11 +47,17 @@ class AutoencoderKL(nn.Module):
             init_from_ckpt(self, ckpt_path)
 
 
-    def encode(self, x):
+    def get_posterior(self, x):
         h = self.encoder(x)
         moments = self.quant_conv(h)
         posterior = DiagonalGaussianDistribution(moments)
         return posterior
+
+    def encode(self, x):
+        h = self.encoder(x)
+        moments = self.quant_conv(h)
+        posterior = DiagonalGaussianDistribution(moments)
+        return posterior.sample(), self.p_loss(posterior, x.device), None
 
 
     def decode(self, z):
@@ -67,7 +77,7 @@ class AutoencoderKL(nn.Module):
         return kl_loss
 
     def forward(self, input, sample_posterior=True):
-        posterior = self.encode(input)
+        posterior = self.get_posterior(input)
         p_loss = self.p_loss(posterior, input.device)
         if sample_posterior:
             z = posterior.sample()

@@ -13,8 +13,6 @@ import math
 import scipy.stats as stats
 from tqdm import tqdm
 
-__all__ = ['MaskGIT', 'MaskGIT_B', 'MaskGIT_L', 'MaskGIT_H']
-
 
 def mask_by_random_topk(mask_len, probs, temperature=1.0):
     mask_len = mask_len.squeeze()
@@ -159,20 +157,23 @@ class MlmLayer(nn.Module):
 class MaskGIT(nn.Module):
     """ Masked Autoencoder with VisionTransformer backbone
     """
-    def __init__(self, img_size=256, num_tokens=8192, patch_size=16, in_chans=3,
+    def __init__(self, img_size=256, num_tokens=8192, vae_stride=16, in_channels=3,
                  embed_dim=1024, depth=24, num_heads=16, num_classes=1000,
                  mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,
                  mask_ratio_min=0.05, mask_ratio_max=0.95, mask_ratio_mu=0.5, mask_ratio_std=0.25,
                  label_smoothing=0.1,
+                 label_drop_prob=0.1,  # Classifier-free guidance: probability of dropping class label
                 ):
         super().__init__()
 
         self.num_classes = num_classes                                             # Number of classes
-        self.seq_len = (img_size // patch_size) ** 2                                # Number of tokens as input
+        self.seq_len = (img_size // vae_stride) ** 2    
+        print(f"img_size: {img_size}, vae_stride: {vae_stride}, seq_len: {self.seq_len}")                            # Number of tokens as input
         self.codebook_size = num_tokens
         vocab_size = self.codebook_size + num_classes + 1 + 1                       # +1 fake class, +1 mask token
         self.fake_class_label = vocab_size - 2
         self.mask_token_label = vocab_size - 1
+        self.label_drop_prob = label_drop_prob
 
 
         self.token_emb = BertEmbeddings(vocab_size=vocab_size,
@@ -189,7 +190,7 @@ class MaskGIT(nn.Module):
         # --------------------------------------------------------------------------
         # MaskGIT encoder specifics
         dropout_rate = 0.1
-        self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
+        self.patch_embed = PatchEmbed(img_size, vae_stride, in_channels, embed_dim)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -238,7 +239,12 @@ class MaskGIT(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def forward_encoder(self, x):
+    def forward_encoder(self, x, y=None):
+        """
+        Args:
+            x: (bsz, seq_len) token indices
+            y: (bsz,) class labels, optional. If None, uses fake_class_label
+        """
         token_indices = x
         gt_indices = token_indices.clone().detach().long()
 
@@ -266,9 +272,25 @@ class MaskGIT(nn.Module):
         token_indices[token_all_mask.nonzero(as_tuple=True)] = self.mask_token_label
         # print("Masekd num token:", torch.sum(token_indices == self.mask_token_label, dim=1))
 
+        # Determine class token labels
+        # Class labels are in range [codebook_size, codebook_size + num_classes)
+        if y is not None:
+            # Apply label dropout for classifier-free guidance during training
+            if self.training and self.label_drop_prob > 0:
+                drop_mask = torch.rand(bsz, device=x.device) < self.label_drop_prob
+                class_labels = torch.where(
+                    drop_mask,
+                    torch.full_like(y, self.fake_class_label),
+                    self.codebook_size + y  # Map class label to vocabulary index
+                )
+            else:
+                class_labels = self.codebook_size + y
+        else:
+            class_labels = torch.full((bsz,), self.fake_class_label, device=x.device, dtype=torch.long)
+
         # concate class token
         token_indices = torch.cat([torch.zeros(token_indices.size(0), 1).to(token_indices.device), token_indices], dim=1)
-        token_indices[:, 0] = self.fake_class_label
+        token_indices[:, 0] = class_labels
         token_drop_mask = torch.cat([torch.zeros(token_indices.size(0), 1).to(token_indices.device), token_drop_mask], dim=1)
         token_all_mask = torch.cat([torch.zeros(token_indices.size(0), 1).to(token_indices.device), token_all_mask], dim=1)
         token_indices = token_indices.long()
@@ -303,104 +325,90 @@ class MaskGIT(nn.Module):
         loss = (loss * mask[:, 1:]).sum() / mask[:, 1:].sum()  # mean loss on removed patches
         return loss
 
-    def forward(self, imgs, labels=None):
-        latent, gt_indices, token_drop_mask, token_all_mask = self.forward_encoder(imgs)
+    def forward(self, imgs, y=None):
+        """
+        Args:
+            imgs: (bsz, seq_len) token indices
+            y: (bsz,) class labels, optional. If provided, uses class conditioning.
+        """
+        latent, gt_indices, token_drop_mask, token_all_mask = self.forward_encoder(imgs, y=y)
         word_embeddings = self.token_emb.word_embeddings.weight.data.detach()
         logits = self.mlm_layer(latent, word_embeddings)
         loss = self.forward_loss(gt_indices, logits, token_all_mask)
-        return loss, imgs, token_all_mask
-
-    # def sample(self, bsz, num_iter=12, choice_temperature=4.5, verbose=False): 
-    #     initial_token_indices = self.mask_token_label * torch.ones(bsz, self.seq_len)
-    #     token_indices = initial_token_indices.cuda()
-
-    #     _CONFIDENCE_OF_KNOWN_TOKENS = +np.inf
+        return loss
 
 
-    #     for step in tqdm(range(num_iter), disable= not verbose):
-    #         cur_ids = token_indices.clone().long()
-
-    #         token_indices = torch.cat(
-    #             [torch.zeros(token_indices.size(0), 1).cuda(device=token_indices.device), token_indices], dim=1)
-    #         token_indices[:, 0] = self.fake_class_label
-    #         token_indices = token_indices.long()
-    #         token_all_mask = token_indices == self.mask_token_label
-
-    #         token_drop_mask = torch.zeros_like(token_indices)
-
-    #         # token embedding
-    #         input_embeddings = self.token_emb(token_indices)
-            
-    #         # encoder
-    #         x = input_embeddings
-    #         for blk in self.blocks:
-    #             x = blk(x)
-    #         latent = self.norm(x)
-
-    #         word_embeddings = self.token_emb.word_embeddings.weight.data.detach()
-    #         logits = self.mlm_layer(latent, word_embeddings)
-
-    #         logits = logits[:, 1:, :self.codebook_size]
-
-    #         # get token prediction
-    #         sample_dist = torch.distributions.categorical.Categorical(logits=logits)
-    #         sampled_ids = sample_dist.sample()
-
-    #         # get ids for next step
-    #         unknown_map = (cur_ids == self.mask_token_label)
-    #         sampled_ids = torch.where(unknown_map, sampled_ids, cur_ids)
-    #         # Defines the mask ratio for the next round. The number to mask out is
-    #         # determined by mask_ratio * unknown_number_in_the_beginning.
-    #         ratio = 1. * (step + 1) / num_iter
-
-    #         mask_ratio = np.cos(math.pi / 2. * ratio)
-
-    #         # sample ids according to prediction confidence
-    #         probs = torch.nn.functional.softmax(logits, dim=-1)
-    #         selected_probs = torch.squeeze(
-    #             torch.gather(probs, dim=-1, index=torch.unsqueeze(sampled_ids, -1)), -1)
-
-    #         selected_probs = torch.where(unknown_map, selected_probs.double(), _CONFIDENCE_OF_KNOWN_TOKENS).float()
-
-    #         mask_len = torch.Tensor([np.floor(self.seq_len * mask_ratio)]).cuda()
-    #         # Keeps at least one of prediction in this round and also masks out at least
-    #         # one and for the next iteration
-    #         mask_len = torch.maximum(torch.Tensor([1]).cuda(),
-    #                                 torch.minimum(torch.sum(unknown_map, dim=-1, keepdims=True) - 1, mask_len))
-
-    #         # Sample masking tokens for next iteration
-    #         masking = mask_by_random_topk(mask_len[0], selected_probs, choice_temperature * (1 - ratio))
-    #         # Masks tokens with lower confidence.
-    #         token_indices = torch.where(masking, self.mask_token_label, sampled_ids)
-
-    #     return sampled_ids
-
-    def sample(self, input_token_indices, mask, num_iter=12, choice_temperature=4.5, verbose=False):
+    def sample(self, bsz, device, input_token_indices=None, mask=None, y=None, num_iter=12, choice_temperature=4.5, verbose=False, cfg=1.0):
         """
+        Sample tokens using iterative refinement (MaskGIT sampling).
+        
+        Supports two modes:
+        1. Inpainting: Provide input_token_indices and mask
+        2. Generation from scratch: Provide bsz and seq_len (or they will be inferred)
+        
         Args:
-            input_token_indices: (bsz, seq_len) LongTensor of input tokens, including known values
-            mask: (bsz, seq_len) ByteTensor or BoolTensor where 1 = to inpaint (masked), 0 = keep as is
-        """
-        device = next(self.parameters()).device
-        bsz, seq_len = input_token_indices.shape
-        mask = mask.bool().to(device)
+            input_token_indices: (bsz, seq_len) LongTensor of input tokens, optional.
+                If None, generation from scratch mode is used.
+            mask: (bsz, seq_len) ByteTensor or BoolTensor where 1 = to inpaint (masked), 0 = keep as is.
+                If None and input_token_indices is None, all tokens are masked (generation from scratch).
+                If None but input_token_indices is provided, assumes all tokens are masked.
+            y: (bsz,) class labels, optional. If None, uses fake_class_label (unconditional)
+            num_iter: number of iterative refinement steps
+            choice_temperature: temperature for token selection
+            verbose: whether to show progress bar
+            cfg: classifier-free guidance scale. If > 1.0, performs CFG by doubling batch size
+            bsz: batch size, required if input_token_indices is None
+            seq_len: sequence length, required if input_token_indices is None. If None, uses self.seq_len
+        """        
+        # Determine mode and initialize accordingly
+        if input_token_indices is None:
+            # Generation from scratch mode
+            # Initialize all tokens as masked
+            token_indices = torch.full((bsz, self.seq_len), self.mask_token_label, device=device, dtype=torch.long)
+            mask = torch.ones((bsz, self.seq_len), device=device, dtype=torch.bool)
+        else:
+            # Inpainting mode
+            bsz, seq_len = input_token_indices.shape
+            input_token_indices = input_token_indices.to(device)
+            
+            if mask is None:
+                # If mask not provided, assume all tokens are masked (generation from scratch with given shape)
+                mask = torch.ones((bsz, seq_len), device=device, dtype=torch.bool)
+            else:
+                mask = mask.bool().to(device)
+            
+            # Initialize token indices: masked positions get mask_token_label, others get given input
+            token_indices = torch.where(
+                mask,
+                torch.full_like(input_token_indices, self.mask_token_label),
+                input_token_indices
+            )
 
-        # 1. Initialize token indices: masked positions get mask_token_label, others get given input
-        token_indices = torch.where(
-            mask,
-            torch.full_like(input_token_indices, self.mask_token_label),
-            input_token_indices
-        ).to(device)
-        # INSERT_YOUR_CODE
-        # Make double sure that we don't accidentelly infuse real data here
-        known_token_indices = token_indices.clone()
+        use_cfg = cfg > 1.0 and y is not None
+        original_bsz = bsz  # Keep track of original batch size
+        
+        # Prepare class labels
+        if y is not None:
+            class_labels = (self.codebook_size + y).to(device)  # Map class to vocabulary index
+        else:
+            class_labels = torch.full((bsz,), self.fake_class_label, device=device, dtype=torch.long)
+        
+        # Classifier-free guidance: duplicate batch ONCE before the loop
+        if use_cfg:
+            token_indices = torch.cat([token_indices, token_indices], dim=0)
+            mask = torch.cat([mask, mask], dim=0)
+            class_labels = torch.cat([
+                class_labels,
+                torch.full((bsz,), self.fake_class_label, device=device, dtype=torch.long)
+            ], dim=0)
+            bsz = bsz * 2
 
         _CONFIDENCE_OF_KNOWN_TOKENS = float("inf")
 
         for step in tqdm(range(num_iter), disable=not verbose):
-            # 2. Prepend fake class token
+            # 2. Prepend class token
             token_indices_with_cls = torch.cat(
-                [torch.full((bsz, 1), self.fake_class_label, device=device, dtype=torch.long), token_indices], dim=1
+                [class_labels.unsqueeze(1), token_indices], dim=1
             )
 
             # 3. Token embedding → transformer → norm
@@ -418,59 +426,63 @@ class MaskGIT(nn.Module):
             logits = self.mlm_layer(latent, word_embeddings)
             logits = logits[:, :, :self.codebook_size]  # [bsz, seq_len, vocab_size]
 
-            # 6. Sample tokens
-            sample_dist = torch.distributions.Categorical(logits=logits)
-            sampled_ids = sample_dist.sample()  # [bsz, seq_len]
+            # 6. Apply classifier-free guidance if enabled
+            if use_cfg:
+                cond_logits, uncond_logits = logits.chunk(2, dim=0)
+                # CFG: logits = uncond_logits + cfg * (cond_logits - uncond_logits)
+                logits = uncond_logits + cfg * (cond_logits - uncond_logits)
+                # After CFG, logits have original batch size, so reduce mask and token_indices to match
+                mask = mask[:original_bsz]
+                token_indices = token_indices[:original_bsz]
+                bsz = original_bsz
 
-            # 7. Keep known tokens fixed (f)
+            # 7. Sample tokens
+            sample_dist = torch.distributions.Categorical(logits=logits)
+            sampled_ids = sample_dist.sample()  # [bsz, seq_len] (original batch size after CFG)
+
+            # 8. Keep known tokens fixed (using original batch size mask and token_indices)
             sampled_ids = torch.where(mask, sampled_ids, token_indices)
 
-            # 8. Compute mask ratio for next iteration (cosine schedule)
+            # 9. Compute mask ratio for next iteration (cosine schedule)
             ratio = (step + 1) / num_iter
             mask_ratio = np.cos(np.pi / 2. * ratio)
             mask_ratio = torch.tensor(mask_ratio, device=device)
 
-            # 9. Confidence scores for predicted tokens
+            # 10. Confidence scores for predicted tokens
             probs = torch.nn.functional.softmax(logits, dim=-1)
             selected_probs = torch.gather(probs, dim=-1, index=sampled_ids.unsqueeze(-1)).squeeze(-1)
 
-            # 10. Force known tokens to have high confidence so they’re never remasked
+            # 11. Force known tokens to have high confidence so they're never remasked
             selected_probs = torch.where(mask, selected_probs, torch.full_like(selected_probs, _CONFIDENCE_OF_KNOWN_TOKENS))
 
-            # 11. Determine how many tokens to re-mask
+            # 12. Determine how many tokens to re-mask
             unknown_counts = mask.sum(dim=1, keepdim=True)  # how many masked tokens per example
-            mask_len = torch.floor(seq_len * mask_ratio).to(device)
+            mask_len = torch.floor(self.seq_len * mask_ratio).to(device)
             mask_len = torch.clamp(mask_len, min=1)
             mask_len = torch.min(mask_len, unknown_counts - 1)
             mask_len = torch.clamp(mask_len, min=1)
 
-            # 12. Create new mask for next iteration (low-confidence tokens get re-masked)
+            # 13. Create new mask for next iteration (low-confidence tokens get re-masked)
             masking = mask_by_random_topk(mask_len[0], selected_probs, choice_temperature * (1 - ratio))
-            # Combine with original mask so we don’t touch known tokens
+            # Combine with original mask so we don't touch known tokens
             new_mask = torch.where(mask, masking, torch.zeros_like(masking, dtype=torch.bool))
 
-            # 13. Update token indices: re-mask low-confidence tokens
+            # 14. Update token indices: re-mask low-confidence tokens
             token_indices = torch.where(new_mask, self.mask_token_label, sampled_ids)
-            with open("token_indices.txt", "a") as f:
-                for token_index in token_indices:
-                    f.write(" ".join(map(str, token_index.tolist())) + "\n\n")
-            mask = new_mask  # update for next round
 
+            mask = new_mask  # update for next round
+            
+            # 15. If CFG was used, duplicate for next iteration (after all computations with original batch size)
+            if use_cfg:
+                token_indices = torch.cat([token_indices, token_indices], dim=0)
+                mask = torch.cat([mask, mask], dim=0)
+                bsz = bsz * 2
+        
+        # If CFG was used, return only the first half (conditional samples)
+        if use_cfg:
+            sampled_ids = sampled_ids[:original_bsz]
+        
         return sampled_ids
 
 
-def MaskGIT_B(**kwargs):
-    model = MaskGIT(
-        embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-def MaskGIT_L(**kwargs):
-    model = MaskGIT(
-        embed_dim=1024, depth=16, num_heads=16, mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-def MaskGIT_H(**kwargs):
-    model = MaskGIT(
-        embed_dim=1280, depth=20, num_heads=16, mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
 
