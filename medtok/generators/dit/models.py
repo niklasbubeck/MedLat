@@ -133,6 +133,36 @@ class LabelEmbedder(nn.Module):
         return embeddings
 
 
+class DatasetEmbedder(nn.Module):
+    """
+    Embeds dataset IDs into vector representations. Also handles label dropout for classifier-free guidance.
+    """
+    def __init__(self, num_datasets, hidden_size, dropout_prob):
+        super().__init__()
+        use_cfg_embedding = dropout_prob > 0
+        self.embedding_table = nn.Embedding(num_datasets + use_cfg_embedding, hidden_size)
+        self.num_datasets = num_datasets
+        self.dropout_prob = dropout_prob
+
+    def token_drop(self, dataset_ids, force_drop_ids=None):
+        """
+        Drops dataset IDs to enable classifier-free guidance.
+        """
+        if force_drop_ids is None:
+            drop_ids = torch.rand(dataset_ids.shape[0], device=dataset_ids.device) < self.dropout_prob
+        else:
+            drop_ids = force_drop_ids == 1
+        dataset_ids = torch.where(drop_ids, self.num_datasets, dataset_ids)
+        return dataset_ids
+
+    def forward(self, dataset_ids, train, force_drop_ids=None):
+        use_dropout = self.dropout_prob > 0
+        if (train and use_dropout) or (force_drop_ids is not None):
+            dataset_ids = self.token_drop(dataset_ids, force_drop_ids)
+        embeddings = self.embedding_table(dataset_ids)
+        return embeddings
+
+
 #################################################################################
 #                                 Core DiT Model                                #
 #################################################################################
@@ -198,6 +228,7 @@ class DiT(nn.Module):
         mlp_ratio=4.0,
         label_drop_prob=0.1,
         num_classes=1000,
+        dataset_num=None,
         learn_sigma=True,
         dims=2,
     ):
@@ -224,6 +255,12 @@ class DiT(nn.Module):
         self.to_pixel = ToPixel(to_pixel='none', img_size=self.img_size, out_channels=self.out_channels, in_dim=hidden_size, patch_size=self.patch_size)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, label_drop_prob)
+        
+        # Dataset ID Embedding (optional)
+        self.use_dataset_conditioning = dataset_num is not None
+        if self.use_dataset_conditioning:
+            self.dataset_embedder = DatasetEmbedder(dataset_num, hidden_size, label_drop_prob)
+        
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
@@ -259,6 +296,10 @@ class DiT(nn.Module):
 
         # Initialize label embedding table:
         nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
+        
+        # Initialize dataset embedding table if used:
+        if self.use_dataset_conditioning:
+            nn.init.normal_(self.dataset_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
@@ -275,31 +316,54 @@ class DiT(nn.Module):
         nn.init.constant_(self.final_layer.linear.weight, 0)
         nn.init.constant_(self.final_layer.linear.bias, 0)
 
-    def forward(self, x, t, y):
+    def forward(self, x, t, y, dataset_id=None):
         """
         Forward pass of DiT.
         x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
+        dataset_id: (N,) tensor of dataset IDs, optional. Only used if dataset_num was provided in __init__
         """
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
+        
+        # Add dataset embedding if dataset conditioning is enabled
+        if self.use_dataset_conditioning and dataset_id is not None:
+            dataset_emb = self.dataset_embedder(dataset_id, self.training)  # (N, D)
+            c = c + dataset_emb
+        
         for block in self.blocks:
             x = block(x, c)                      # (N, T, D)
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.to_pixel(x)                   # (N, out_channels, H, W)
         return x
 
-    def forward_with_cfg(self, x, t, y, cfg_scale):
+    def forward_with_cfg(self, x, t, y, cfg_scale, dataset_id=None):
         """
         Forward pass of DiT, but also batches the unconditional forward pass for classifier-free guidance.
         """
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
-        model_out = self.forward(combined, t, y)
+        
+        # Prepare dataset_id for CFG: first half gets real dataset_id, second half gets fake (unconditional)
+        if self.use_dataset_conditioning:
+            if dataset_id is not None:
+                # Concatenate real dataset_id for conditional pass and fake for unconditional pass
+                dataset_id_cfg = torch.cat([
+                    dataset_id,
+                    torch.full_like(dataset_id, self.dataset_embedder.num_datasets)  # Use fake dataset ID for unconditional
+                ], dim=0)
+            else:
+                # If dataset_id is None, use fake for both (fully unconditional)
+                dataset_id_cfg = torch.full((combined.shape[0],), self.dataset_embedder.num_datasets, 
+                                           device=combined.device, dtype=torch.long)
+        else:
+            dataset_id_cfg = None
+        
+        model_out = self.forward(combined, t, y, dataset_id_cfg)
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.

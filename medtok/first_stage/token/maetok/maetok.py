@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from .modules import MAETokViTEncoder, MAETokViTDecoder
 from medtok.modules.alignments import HOGAlignment, DinoAlignment, ClipAlignment
 from medtok.registry import register_model
+from medtok.utils import init_from_ckpt
 
 __all__ = ['MaskAEModel']
 
@@ -72,6 +73,7 @@ class MaskAEModel(nn.Module):
                  aux_dino_dec: bool = True,
                  aux_clip_dec: bool = True,
                  aux_biomed_clip_dec: bool = False,
+                 ckpt_path: str = None,
                  ):
         super().__init__()
         self.img_size = img_size
@@ -278,6 +280,8 @@ class MaskAEModel(nn.Module):
         #     self.post_quant_conv_clip = nn.Linear(self.codebook_embed_dim, self.decoder_biomed_clip.embed_dim)
         #     self.to_pixel_clip = nn.Linear(self.decoder_biomed_clip.embed_dim, self.biomed_clip_model.embed_dim)
 
+        if ckpt_path is not None:
+            init_from_ckpt(self, ckpt_path)
 
 
     def encode(self, x):

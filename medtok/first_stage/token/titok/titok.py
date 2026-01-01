@@ -32,7 +32,7 @@ from pathlib import Path
 from medtok.first_stage.discrete.vq_models import VQModel
 from medtok.first_stage.discrete.quantizer.quantize import VectorQuantizer2
 from typing import Optional
-
+from medtok.utils import init_from_ckpt
 __all__ = ["TiTok"]
 
 
@@ -118,7 +118,8 @@ class TiTok(nn.Module):
                  pixel_vqgan: Optional[VQModel] = None, # VQModel = PretrainedTokenizer("/vol/miltank/users/bubeckn/1d-tokenizer/maskgit-vqgan-imagenet-f16-256.bin"), 
                  stage="1", 
                  quantize_mode="vq",
-                 dims=2):
+                 dims=2,
+                 ckpt_path=None):
         super().__init__()
         # This should be False for stage1 and True for stage2.
         self.stage=stage
@@ -132,6 +133,8 @@ class TiTok(nn.Module):
         assert not (self.stage == "1" and pixel_vqgan is None), "For stage 1, pixel_vqgan is required."
         self.dims = len(img_size)
 
+        self.n_embed = codebook_size
+        self.embed_dim = token_size
         print(f"num latent tokens: {num_latent_tokens}")
         self.quantize_mode = quantize_mode
         self.quantizer_loss_weight = quantizer_loss_weight
@@ -210,6 +213,9 @@ class TiTok(nn.Module):
         if pixel_vqgan is not None:
             self.pixel_vqgan = pixel_vqgan.eval()
             self.pixel_vqgan.requires_grad_(False)
+
+        if ckpt_path is not None:
+            init_from_ckpt(self, ckpt_path)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -266,16 +272,20 @@ class TiTok(nn.Module):
         return decoded
     
 
-    def decode_tokens(self, tokens):
+    def decode_code(self, tokens, out_shape=None):
         if self.quantize_mode == "vq":
             tokens = tokens.squeeze(1)
-            batch, seq_len = tokens.shape # B x N
-            z_quantized = self.quantize.get_codebook_entry(
-                tokens.reshape(-1)).reshape(batch, 1, seq_len, -1)
-            z_quantized = rearrange(z_quantized, 'b h w c -> b c h w').contiguous()
+            quant_b = self.quantize.get_codebook_entry(tokens, shape=out_shape)
+            # Move channel dimension (which is last) to the second
+            if quant_b.dim() == 4:
+                # (B, H, W, C) -> (B, C, H, W)
+                quant_b = quant_b.permute(0, 3, 1, 2).contiguous()
+            elif quant_b.dim() == 5:
+                # (B, D, H, W, C) -> (B, C, D, H, W)
+                quant_b = quant_b.permute(0, 4, 1, 2, 3).contiguous()
         elif self.quantize_mode == "vae":
-            z_quantized = tokens
-        decoded = self.decode(z_quantized)
+            quant_b = tokens
+        decoded = self.decode(quant_b)
         return decoded
     
     def proxy_code_loss(self, decoded, x, q_loss):

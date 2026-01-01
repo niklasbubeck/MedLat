@@ -73,6 +73,26 @@ class EmbeddingEMA(nn.Module):
             # Normalize embed_avg and update weight
             self.weight_update(num_tokens)   
 
+class QincoSubstep(nn.Module):
+    def __init__(self, e_dim: int, hidden_dim: int = 256, num_layers: int = 3):
+        super().__init__()
+        in_dim = e_dim * 2  # concat(base_code, x_prev)
+        layers = []
+        for _ in range(num_layers - 1):
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            in_dim = hidden_dim
+        layers.append(nn.Linear(hidden_dim, e_dim))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, base_code: torch.Tensor, x_prev: torch.Tensor) -> torch.Tensor:
+        """
+        base_code: (B, D)
+        x_prev:    (B, D)
+        returns:   (B, D) delta
+        """
+        inp = torch.cat([base_code, x_prev], dim=-1)
+        return self.net(inp)
 
 class ImplicitEmbedding(nn.Module):
     """

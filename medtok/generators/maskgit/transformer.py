@@ -159,16 +159,22 @@ class MaskGIT(nn.Module):
     """
     def __init__(self, img_size=256, num_tokens=8192, vae_stride=16, in_channels=3,
                  embed_dim=1024, depth=24, num_heads=16, num_classes=1000,
+                 dataset_num=None,
                  mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,
                  mask_ratio_min=0.05, mask_ratio_max=0.95, mask_ratio_mu=0.5, mask_ratio_std=0.25,
                  label_smoothing=0.1,
                  label_drop_prob=0.1,  # Classifier-free guidance: probability of dropping class label
+                 seq_len=None,
                 ):
         super().__init__()
 
         self.num_classes = num_classes                                             # Number of classes
-        self.seq_len = (img_size // vae_stride) ** 2    
-        print(f"img_size: {img_size}, vae_stride: {vae_stride}, seq_len: {self.seq_len}")                            # Number of tokens as input
+        if seq_len is None and vae_stride is not None:
+            self.seq_len = (img_size // vae_stride) ** 2  
+        elif seq_len is not None:
+            self.seq_len = seq_len
+        else:
+            raise ValueError("Either seq_len or vae_stride must be provided")
         self.codebook_size = num_tokens
         vocab_size = self.codebook_size + num_classes + 1 + 1                       # +1 fake class, +1 mask token
         self.fake_class_label = vocab_size - 2
@@ -181,6 +187,15 @@ class MaskGIT(nn.Module):
                                         max_position_embeddings=self.seq_len+1,   # seq len + 1 cls token
                                         dropout=0.1)
 
+        # --------------------------------------------------------------------------
+        # Dataset ID Embedding (optional)
+        self.use_dataset_conditioning = dataset_num is not None
+        if self.use_dataset_conditioning:
+            self.num_datasets = dataset_num
+            self.dataset_emb = nn.Embedding(dataset_num, embed_dim)
+            # Fake dataset embedding for unconditional generation
+            self.fake_dataset_latent = nn.Parameter(torch.zeros(1, embed_dim))
+
         # MAGE variant masking ratio
         self.mask_ratio_min = mask_ratio_min
         self.mask_ratio_generator = stats.truncnorm((mask_ratio_min - mask_ratio_mu) / mask_ratio_std,
@@ -190,11 +205,9 @@ class MaskGIT(nn.Module):
         # --------------------------------------------------------------------------
         # MaskGIT encoder specifics
         dropout_rate = 0.1
-        self.patch_embed = PatchEmbed(img_size, vae_stride, in_channels, embed_dim)
-        num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False)  # fixed sin-cos embedding
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.seq_len + 1, embed_dim)) #learnable
 
         self.blocks = nn.ModuleList([
             Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer,
@@ -215,16 +228,15 @@ class MaskGIT(nn.Module):
 
     def initialize_weights(self):
         # initialization
-        # initialize (and freeze) pos_embed by sin-cos embedding
-        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.patch_embed.num_patches**.5), cls_token=True)
-        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
-
-        # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
-        w = self.patch_embed.proj.weight.data
-        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
         torch.nn.init.normal_(self.cls_token, std=.02)
+        torch.nn.init.normal_(self.pos_embed, std=.02)
+
+        # initialize dataset embedding if used
+        if self.use_dataset_conditioning:
+            torch.nn.init.normal_(self.dataset_emb.weight, std=.02)
+            torch.nn.init.normal_(self.fake_dataset_latent, std=.02)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -239,11 +251,12 @@ class MaskGIT(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def forward_encoder(self, x, y=None):
+    def forward_encoder(self, x, y=None, dataset_id=None):
         """
         Args:
             x: (bsz, seq_len) token indices
             y: (bsz,) class labels, optional. If None, uses fake_class_label
+            dataset_id: (bsz,) dataset IDs, optional. Only used if dataset_num was provided in __init__
         """
         token_indices = x
         gt_indices = token_indices.clone().detach().long()
@@ -299,6 +312,24 @@ class MaskGIT(nn.Module):
         # print("Input embedding shape:", input_embeddings.shape)
         bsz, seq_len, emb_dim = input_embeddings.shape
 
+        # Add dataset embedding to class token (position 0) if dataset conditioning is enabled
+        if self.use_dataset_conditioning:
+            if dataset_id is not None:
+                # Apply label dropout for dataset ID during training (similar to class label)
+                if self.training and self.label_drop_prob > 0:
+                    drop_mask = torch.rand(bsz, device=x.device) < self.label_drop_prob
+                    dataset_embedding = torch.where(
+                        drop_mask.unsqueeze(-1),
+                        self.fake_dataset_latent.expand(bsz, -1),
+                        self.dataset_emb(dataset_id)
+                    )
+                else:
+                    dataset_embedding = self.dataset_emb(dataset_id)
+            else:
+                dataset_embedding = self.fake_dataset_latent.expand(bsz, -1)
+            # Add dataset embedding to class token position
+            input_embeddings[:, 0] = input_embeddings[:, 0] + dataset_embedding
+
         # No dropping needed because we use BEiT style architecture
         # dropping
         # token_keep_mask = 1 - token_drop_mask
@@ -325,20 +356,21 @@ class MaskGIT(nn.Module):
         loss = (loss * mask[:, 1:]).sum() / mask[:, 1:].sum()  # mean loss on removed patches
         return loss
 
-    def forward(self, imgs, y=None):
+    def forward(self, imgs, y=None, dataset_id=None):
         """
         Args:
             imgs: (bsz, seq_len) token indices
             y: (bsz,) class labels, optional. If provided, uses class conditioning.
+            dataset_id: (bsz,) dataset IDs, optional. Only used if dataset_num was provided in __init__
         """
-        latent, gt_indices, token_drop_mask, token_all_mask = self.forward_encoder(imgs, y=y)
+        latent, gt_indices, token_drop_mask, token_all_mask = self.forward_encoder(imgs, y=y, dataset_id=dataset_id)
         word_embeddings = self.token_emb.word_embeddings.weight.data.detach()
         logits = self.mlm_layer(latent, word_embeddings)
         loss = self.forward_loss(gt_indices, logits, token_all_mask)
         return loss
 
 
-    def sample(self, bsz, device, input_token_indices=None, mask=None, y=None, num_iter=12, choice_temperature=4.5, verbose=False, cfg=1.0):
+    def sample(self, bsz, device, input_token_indices=None, mask=None, y=None, dataset_id=None, num_iter=12, choice_temperature=4.5, verbose=False, cfg=1.0):
         """
         Sample tokens using iterative refinement (MaskGIT sampling).
         
@@ -353,6 +385,7 @@ class MaskGIT(nn.Module):
                 If None and input_token_indices is None, all tokens are masked (generation from scratch).
                 If None but input_token_indices is provided, assumes all tokens are masked.
             y: (bsz,) class labels, optional. If None, uses fake_class_label (unconditional)
+            dataset_id: (bsz,) dataset IDs, optional. Only used if dataset_num was provided in __init__
             num_iter: number of iterative refinement steps
             choice_temperature: temperature for token selection
             verbose: whether to show progress bar
@@ -383,7 +416,7 @@ class MaskGIT(nn.Module):
                 torch.full_like(input_token_indices, self.mask_token_label),
                 input_token_indices
             )
-
+        bsz, seq_len = token_indices.shape
         use_cfg = cfg > 1.0 and y is not None
         original_bsz = bsz  # Keep track of original batch size
         
@@ -393,6 +426,14 @@ class MaskGIT(nn.Module):
         else:
             class_labels = torch.full((bsz,), self.fake_class_label, device=device, dtype=torch.long)
         
+        # Prepare dataset embedding (optional)
+        dataset_embedding = None
+        if self.use_dataset_conditioning:
+            if dataset_id is not None:
+                dataset_embedding = self.dataset_emb(dataset_id.to(device))
+            else:
+                dataset_embedding = self.fake_dataset_latent.expand(bsz, -1).to(device)
+        
         # Classifier-free guidance: duplicate batch ONCE before the loop
         if use_cfg:
             token_indices = torch.cat([token_indices, token_indices], dim=0)
@@ -401,6 +442,11 @@ class MaskGIT(nn.Module):
                 class_labels,
                 torch.full((bsz,), self.fake_class_label, device=device, dtype=torch.long)
             ], dim=0)
+            if dataset_embedding is not None:
+                dataset_embedding = torch.cat([
+                    dataset_embedding,
+                    self.fake_dataset_latent.expand(bsz, -1).to(device)
+                ], dim=0)
             bsz = bsz * 2
 
         _CONFIDENCE_OF_KNOWN_TOKENS = float("inf")
@@ -413,6 +459,11 @@ class MaskGIT(nn.Module):
 
             # 3. Token embedding → transformer → norm
             input_embeddings = self.token_emb(token_indices_with_cls)
+            
+            # Add dataset embedding to class token (position 0) if dataset conditioning is enabled
+            if dataset_embedding is not None:
+                input_embeddings[:, 0] = input_embeddings[:, 0] + dataset_embedding
+            
             x = input_embeddings
             for blk in self.blocks:
                 x = blk(x)
@@ -431,9 +482,11 @@ class MaskGIT(nn.Module):
                 cond_logits, uncond_logits = logits.chunk(2, dim=0)
                 # CFG: logits = uncond_logits + cfg * (cond_logits - uncond_logits)
                 logits = uncond_logits + cfg * (cond_logits - uncond_logits)
-                # After CFG, logits have original batch size, so reduce mask and token_indices to match
+                # After CFG, logits have original batch size, so reduce mask, token_indices, and dataset_embedding to match
                 mask = mask[:original_bsz]
                 token_indices = token_indices[:original_bsz]
+                if dataset_embedding is not None:
+                    dataset_embedding = dataset_embedding[:original_bsz]
                 bsz = original_bsz
 
             # 7. Sample tokens
@@ -476,6 +529,11 @@ class MaskGIT(nn.Module):
             if use_cfg:
                 token_indices = torch.cat([token_indices, token_indices], dim=0)
                 mask = torch.cat([mask, mask], dim=0)
+                if dataset_embedding is not None:
+                    dataset_embedding = torch.cat([
+                        dataset_embedding[:original_bsz],
+                        self.fake_dataset_latent.expand(original_bsz, -1).to(device)
+                    ], dim=0)
                 bsz = bsz * 2
         
         # If CFG was used, return only the first half (conditional samples)

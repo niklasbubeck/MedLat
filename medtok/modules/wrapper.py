@@ -113,8 +113,13 @@ class GenWrapper(nn.Module):
         else:
             if self.is_autoregressive:
                 _, _, indices = info
-                return indices.reshape(image.shape[0], -1)
-            else:
+                if type(indices) == torch.Tensor: ## normal
+                    return indices.reshape(image.shape[0], -1)
+                elif isinstance(indices, (list, tuple)):  # residual quantizer
+                    indices = [ind.reshape(image.shape[0], -1) for ind in indices]
+                    return torch.cat(indices, dim=1)
+                return quant
+            else: 
                 return quant
 
     # ---------------------------------------------------------------------

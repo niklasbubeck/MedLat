@@ -47,7 +47,6 @@ class VQModel(nn.Module):
                 "v_patch_nums, quant_resi, share_quant_resi, and using_znorm parameters."
             )
 
-
     def lock_parameters(self):
         """Lock the parameters of the model to prevent them from being updated during training."""
         for param in self.parameters():

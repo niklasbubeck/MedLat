@@ -33,6 +33,7 @@ class MAR(nn.Module):
                  mask_ratio_min=0.7,
                  label_drop_prob=0.1,
                  class_num=1000,
+                 dataset_num=None,
                  attn_dropout=0.1,
                  proj_dropout=0.1,
                  buffer_size=64,
@@ -63,6 +64,15 @@ class MAR(nn.Module):
         self.label_drop_prob = label_drop_prob
         # Fake class embedding for CFG's unconditional generation
         self.fake_latent = nn.Parameter(torch.zeros(1, encoder_embed_dim))
+        
+        # --------------------------------------------------------------------------
+        # Dataset ID Embedding (optional)
+        self.use_dataset_conditioning = dataset_num is not None
+        if self.use_dataset_conditioning:
+            self.num_datasets = dataset_num
+            self.dataset_emb = nn.Embedding(dataset_num, encoder_embed_dim)
+            # Fake dataset embedding for unconditional generation
+            self.fake_dataset_latent = nn.Parameter(torch.zeros(1, encoder_embed_dim))
 
         # --------------------------------------------------------------------------
         # MAR variant masking ratio, a left-half truncated Gaussian centered at 100% masking ratio with std 0.25
@@ -111,6 +121,9 @@ class MAR(nn.Module):
         # parameters
         torch.nn.init.normal_(self.class_emb.weight, std=.02)
         torch.nn.init.normal_(self.fake_latent, std=.02)
+        if self.use_dataset_conditioning:
+            torch.nn.init.normal_(self.dataset_emb.weight, std=.02)
+            torch.nn.init.normal_(self.fake_dataset_latent, std=.02)
         torch.nn.init.normal_(self.mask_token, std=.02)
         torch.nn.init.normal_(self.encoder_pos_embed_learned, std=.02)
         torch.nn.init.normal_(self.decoder_pos_embed_learned, std=.02)
@@ -174,7 +187,7 @@ class MAR(nn.Module):
                              src=torch.ones(bsz, seq_len, device=x.device))
         return mask
 
-    def forward_mae_encoder(self, x, mask, class_embedding):
+    def forward_mae_encoder(self, x, mask, class_embedding, dataset_embedding=None):
         x = self.z_proj(x)
         bsz, seq_len, embed_dim = x.shape
 
@@ -188,7 +201,12 @@ class MAR(nn.Module):
             drop_latent_mask = drop_latent_mask.unsqueeze(-1).cuda().to(x.dtype)
             class_embedding = drop_latent_mask * self.fake_latent + (1 - drop_latent_mask) * class_embedding
 
-        x[:, :self.buffer_size] = class_embedding.unsqueeze(1)
+        # combine class and dataset embeddings
+        combined_embedding = class_embedding
+        if dataset_embedding is not None:
+            combined_embedding = combined_embedding + dataset_embedding
+
+        x[:, :self.buffer_size] = combined_embedding.unsqueeze(1)
 
         # encoder position embedding
         x = x + self.encoder_pos_embed_learned
@@ -238,10 +256,15 @@ class MAR(nn.Module):
         loss = self.diffloss(z=z, target=target, mask=mask)
         return loss
 
-    def forward(self, imgs, y=None):
+    def forward(self, imgs, y=None, dataset_id=None):
 
         # class embed
         class_embedding = self.class_emb(y)
+        
+        # dataset embed (optional)
+        dataset_embedding = None
+        if self.use_dataset_conditioning and dataset_id is not None:
+            dataset_embedding = self.dataset_emb(dataset_id)
 
         # patchify and mask (drop) tokens
         x = self.patchify(imgs)
@@ -250,7 +273,7 @@ class MAR(nn.Module):
         mask = self.random_masking(x, orders)
 
         # mae encoder
-        x = self.forward_mae_encoder(x, mask, class_embedding)
+        x = self.forward_mae_encoder(x, mask, class_embedding, dataset_embedding)
 
         # mae decoder
         z = self.forward_mae_decoder(x, mask)
@@ -260,7 +283,7 @@ class MAR(nn.Module):
 
         return loss
 
-    def sample(self, bsz, device, *args, tokens=None, mask=None, orders=None, num_iter=16, cfg=1.0, cfg_schedule="linear", y=None, temperature=1.0, progress=False, **kwargs):
+    def sample(self, bsz, device, *args, tokens=None, mask=None, orders=None, num_iter=16, cfg=1.0, cfg_schedule="linear", y=None, dataset_id=None, temperature=1.0, progress=False, **kwargs):
 
         mask = torch.ones(bsz, self.seq_len).to(device) if mask is None else mask
         tokens = torch.zeros(bsz, self.seq_len, self.token_embed_dim).to(device) if tokens is None else tokens
@@ -279,13 +302,24 @@ class MAR(nn.Module):
                 class_embedding = self.class_emb(y)
             else:
                 class_embedding = self.fake_latent.repeat(bsz, 1)
+            
+            # dataset embedding (optional)
+            dataset_embedding = None
+            if self.use_dataset_conditioning:
+                if dataset_id is not None:
+                    dataset_embedding = self.dataset_emb(dataset_id)
+                else:
+                    dataset_embedding = self.fake_dataset_latent.repeat(bsz, 1)
+            
             if not cfg == 1.0:
                 tokens = torch.cat([tokens, tokens], dim=0)
                 class_embedding = torch.cat([class_embedding, self.fake_latent.repeat(bsz, 1)], dim=0)
+                if dataset_embedding is not None:
+                    dataset_embedding = torch.cat([dataset_embedding, self.fake_dataset_latent.repeat(bsz, 1)], dim=0)
                 mask = torch.cat([mask, mask], dim=0)
 
             # mae encoder
-            x = self.forward_mae_encoder(tokens, mask, class_embedding)
+            x = self.forward_mae_encoder(tokens, mask, class_embedding, dataset_embedding)
 
             # mae decoder
             z = self.forward_mae_decoder(x, mask)

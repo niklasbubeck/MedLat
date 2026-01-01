@@ -14,7 +14,7 @@ from torch.amp import autocast
 from medtok.registry import register_model
 
 
-__all__ = ["VectorQuantizer", "GumbelQuantize", "SimpleQINCo", "VectorQuantizer2", "SimVQ", "ResidualQuantizer", "GroupedVQ", "MultiScaleResidualQuantizer", "LookupFreeQuantizer", "FiniteScalarQuantizer", "BinarySphericalQuantizer"]
+__all__ = ["VectorQuantizer", "GumbelQuantize", "SimpleQINCo", "VectorQuantizer2", "SimVQ", "ResidualQuantizer", "GroupedVQ", "MultiScaleResidualQuantizer", "LookupFreeQuantizer", "FiniteScalarQuantizer", "BinarySphericalQuantizer", "QINCo", "QincoResidualQuantizer"]
 
 _REGISTRY_PREFIX = "discrete.quantizer."
 
@@ -359,10 +359,7 @@ class VectorQuantizer2(nn.Module):
             z_q = z_q.view(shape)
         return self.norm(z_q)
 
-@register_model(f"{_REGISTRY_PREFIX}simple_qinco",
-code_url="https://github.com/facebookresearch/Qinco",
-paper_url="https://arxiv.org/abs/2401.14732",
-)
+
 
 class SimpleQINCo(VectorQuantizer2):
     def __init__(self, n_e, e_dim, beta=0.25,
@@ -378,6 +375,118 @@ class SimpleQINCo(VectorQuantizer2):
             hidden_dim=hidden_dim,
             num_layers=num_layers
         )
+
+@register_model(f"{_REGISTRY_PREFIX}simple_qinco",
+code_url="https://github.com/facebookresearch/Qinco",
+paper_url="https://arxiv.org/abs/2401.14732",
+)
+class QINCo(nn.Module):
+    def __init__(
+        self,
+        n_e: int,
+        e_dim: int,
+        beta: float = 0.25,
+        top_a: int = 64,
+        hidden_dim: int = 256,
+        num_layers: int = 3,
+        commitment_weight: float = 1.0,
+    ):
+        """
+        n_e: number of codes
+        e_dim: embedding dimension
+        beta: commitment loss factor (like VQ-VAE)
+        top_a: number of top candidates per vector
+        hidden_dim, num_layers: for QincoSubstep
+        """
+        super().__init__()
+        self.n_e = n_e
+        self.e_dim = e_dim
+        self.beta = beta
+        self.commitment_weight = commitment_weight
+        self.top_a = top_a
+        # implicit base codebook
+        self.embedding = ImplicitEmbedding(
+            n_e=n_e,
+            e_dim=e_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+        )
+
+        # QINCo-style transform
+        self.transform = QincoSubstep(
+            e_dim=e_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+        )
+
+    @property
+    def e_dim_prop(self):
+        return self.e_dim
+
+    @property
+    def n_e_prop(self):
+        return self.n_e
+
+    def forward(self, residual: torch.Tensor, x_prev: torch.Tensor):
+        """
+        residual: (B, D, ...)  flattened to (B_flat, D)
+        x_prev:  same shape as residual
+        """
+        orig_shape = residual.shape
+        B_flat = residual.numel() // self.e_dim
+        residual_flat = residual.view(B_flat, self.e_dim)
+        x_prev_flat = x_prev.view(B_flat, self.e_dim)
+
+        # ----- 1) cheap distance using base codes (no transform) -----
+        base_codes = self.embedding.weight            # (K, D)
+        K = base_codes.size(0)
+
+        # (B_flat, 1, D) - (1, K, D) -> (B_flat, K, D)
+        diff_base = residual_flat.unsqueeze(1) - base_codes.unsqueeze(0)
+        dist_base = (diff_base ** 2).sum(-1)          # (B_flat, K)
+
+        A = min(self.top_a, K)
+        # top-A smallest distances
+        topk_dist, topk_idx = dist_base.topk(A, dim=-1, largest=False, sorted=False)  # (B_flat, A)
+
+        # ----- 2) run transform only on these A candidates -----
+        # gather base codes for selected indices
+        codes_sel = base_codes[topk_idx]              # (B_flat, A, D)
+        x_prev_sel = x_prev_flat.unsqueeze(1).expand(-1, A, -1)   # (B_flat, A, D)
+
+        # flatten for QincoSubstep
+        codes_in = codes_sel.reshape(-1, self.e_dim)  # (B_flat*A, D)
+        x_in = x_prev_sel.reshape(-1, self.e_dim)     # (B_flat*A, D)
+
+        deltas_sel = self.transform(codes_in, x_in)   # (B_flat*A, D)
+        deltas_sel = deltas_sel.view(B_flat, A, self.e_dim)  # (B_flat, A, D)
+
+        # ----- 3) pick best among the A candidates -----
+        diff = residual_flat.unsqueeze(1) - deltas_sel      # (B_flat, A, D)
+        dist = (diff ** 2).sum(-1)                         # (B_flat, A)
+        best_in_A = dist.argmin(-1)                        # (B_flat,)
+
+        # map back to global code indices
+        indices = topk_idx[torch.arange(B_flat, device=residual.device), best_in_A]  # (B_flat,)
+
+        # final quantized vector: transform(selected_base_code, x_prev)
+        chosen_base = base_codes[indices]                  # (B_flat, D)
+        z_q_flat = self.transform(chosen_base, x_prev_flat)  # (B_flat, D)
+        z_q = z_q_flat.view(orig_shape)
+
+        # ----- 4) losses & perplexity -----
+        loss_commit = F.mse_loss(z_q_flat.detach(), residual_flat)
+        loss_embed = F.mse_loss(z_q_flat, residual_flat.detach())
+        loss = loss_embed + self.beta * loss_commit
+
+        with torch.no_grad():
+            one_hot = F.one_hot(indices, num_classes=self.n_e).float()
+            avg_probs = one_hot.mean(0)
+            perplexity = torch.exp(- (avg_probs * (avg_probs + 1e-10).log()).sum())
+
+        indices = indices.view(-1)
+
+        return z_q, loss, (perplexity, None, indices)
 
 
 class SimVQ(nn.Module):
@@ -471,6 +580,14 @@ class SimVQ(nn.Module):
 
         return z_q, loss, (None, None, indices)
 
+
+    def get_codebook_entry(self, indices, shape=None):
+        codebook = self.embedding  # (n_e, in_channels)
+        # lookup
+        z_q = codebook[indices]
+        if shape is not None:
+            z_q = z_q.view(shape)
+        return z_q
 
 @register_model(f"{_REGISTRY_PREFIX}residual_quantizer",
 paper_url="https://arxiv.org/abs/2107.03312",
@@ -569,6 +686,152 @@ class ResidualQuantizer(nn.Module):
 
         return final_quantized, total_loss, (all_perplexities, quantized_outputs, all_indices)
 
+    def get_codebook_entry(self, indices, shape=None):
+        """
+        indices: Tensor of shape (B, X) or list of tensors
+                assumed ordered coarse → fine if Tensor
+        """
+
+        # ------------------------------------------------------------
+        # Normalize to list of per-level indices
+        # ------------------------------------------------------------
+        if isinstance(indices, torch.Tensor):
+            B, X = indices.shape
+            Q = self.num_quantizers
+
+            if X % Q != 0:
+                raise ValueError(
+                    f"Total indices {X} not divisible by num_quantizers {Q}"
+                )
+
+            chunk = X // Q
+            indices_list = [
+                indices[:, i * chunk : (i + 1) * chunk]
+                for i in range(Q)
+            ]
+
+        elif isinstance(indices, (list, tuple)):
+            if len(indices) != self.num_quantizers:
+                raise ValueError(
+                    f"Expected {self.num_quantizers} levels, got {len(indices)}"
+                )
+            indices_list = list(indices)
+
+        else:
+            raise TypeError("indices must be Tensor or list/tuple")
+
+        # ------------------------------------------------------------
+        # Lookup & sum residual codebooks
+        # ------------------------------------------------------------
+        z_q = None
+
+        for q, idx in zip(self.levels, indices_list):
+            idx = idx.long()
+
+            # Handle quantizer dropout
+            if torch.all(idx < 0):
+                continue
+
+            z_q_i = q.get_codebook_entry(idx)
+
+            z_q = z_q_i if z_q is None else z_q + z_q_i
+
+        if z_q is None:
+            raise RuntimeError("All quantizer levels were dropped.")
+
+        # ------------------------------------------------------------
+        # Reshape if needed
+        # ------------------------------------------------------------
+        if shape is not None:
+            z_q = z_q.view(shape)
+
+        return z_q
+
+class QincoResidualQuantizer(nn.Module):
+    def __init__(
+        self,
+        quantizer_class: nn.Module,
+        num_quantizers: int,
+        quantizer_kwargs_list: List[Dict],
+        shared_codebook: bool = False,
+        quantize_dropout: bool = False,
+        dropout_start_level: int = 0,
+    ):
+        super().__init__()
+
+        self.num_quantizers = num_quantizers
+        self.quantize_dropout = quantize_dropout
+        self.dropout_start_level = dropout_start_level
+        self.shared_codebook = shared_codebook
+
+        self.levels = nn.ModuleList([
+            quantizer_class(**quantizer_kwargs_list[i])
+            for i in range(num_quantizers)
+        ])
+
+        if shared_codebook:
+            first = self.levels[0]
+            shared = first.embedding
+            for q in self.levels[1:]:
+                q.embedding = shared
+
+    @property
+    def e_dim(self):
+        return self.levels[0].e_dim_prop
+
+    @property
+    def n_e(self):
+        return self.levels[0].n_e_prop
+
+    def forward(self, x: torch.Tensor):
+        """
+        x: (B, D, ...) – same as your original
+        """
+        residual = x
+        x_prev = torch.zeros_like(x)
+
+        quantized_outputs = []
+        losses = []
+        all_indices = []
+        all_perplexities = []
+
+        # dropout level
+        if self.training and self.quantize_dropout and self.num_quantizers > 1:
+            dropout_level = torch.randint(
+                self.dropout_start_level,
+                self.num_quantizers,
+                (1,)
+            ).item()
+        else:
+            dropout_level = self.num_quantizers
+
+        for i, q in enumerate(self.levels):
+
+            if i >= dropout_level:
+                quantized_outputs.append(torch.zeros_like(residual))
+                losses.append(torch.tensor(0.0, device=x.device))
+                all_perplexities.append(None)
+                all_indices.append(torch.full_like(residual[..., 0], -1, dtype=torch.long))
+                continue
+
+            # QINCo: quantizer sees residual and x_prev (partial reconstruction)
+            z_q, loss, (perplexity, _, indices) = q(residual, x_prev=x_prev)
+
+            quantized_outputs.append(z_q)
+            losses.append(loss)
+            all_indices.append(indices)
+            all_perplexities.append(perplexity)
+
+            # update partial reconstruction
+            x_prev = x_prev + z_q
+
+            # update residual (detach like RQ init)
+            residual = (x - x_prev).detach()
+
+        final_quantized = sum(quantized_outputs)
+        total_loss = sum(losses)
+
+        return final_quantized, total_loss, (all_perplexities, quantized_outputs, all_indices)
 
 @register_model(f"{_REGISTRY_PREFIX}grouped_residual_quantizer",
     code_url="https://github.com/yangdongchao/AcademiCodec",
@@ -983,9 +1246,20 @@ class LookupFreeQuantizer(torch.nn.Module):
         return z_q, loss, (per_sample_entropy, None, min_encoding_indices) # We don't have one_hot encodings here
 
     def get_codebook_entry(self, indices: torch.Tensor, shape=None) -> torch.Tensor:
+        """
+        indices: Tensor of shape (B, N) or (B, H, W)
+        shape:   target shape, e.g. (B, C, H, W)
+        """
+
         indices = indices.long()
-        bits = ((indices[..., None].int() & self.bits_to_indices) != 0).float()
-        tokens = bits * 2.0 - 1.0  # scale to -1..1
+        print(f"indices: {indices.shape}")
+        if shape is not None:
+            indices = indices.reshape(-1, shape[-3], shape[-2])
+        print(f"indices: {indices.shape}")
+        bits = ((indices[..., None] & self.bits_to_indices) != 0).float()
+        tokens = bits * 2.0 - 1.0  # (..., token_bits)
+
+        print(f"tokens: {tokens.shape}")
         return tokens
 
     def convert_bits_to_indices(self, tokens: torch.Tensor) -> torch.Tensor:
