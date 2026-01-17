@@ -1844,6 +1844,7 @@ def QINCo_f4_d3_e8192(
         n_e=8192,
         e_dim=3,
         beta=0.25,
+        top_a=64,
         hidden_dim=256,
         num_layers=3,
         shared_codebook=True,
@@ -1885,6 +1886,7 @@ def QINCo_f4_d3_e8192(
                 "n_e": n_e,
                 "e_dim": e_dim,
                 "beta": beta,
+                "top_a": top_a,
                 "hidden_dim": hidden_dim,
                 "num_layers": num_layers,
             }
@@ -1916,6 +1918,7 @@ def QINCo_f8_d4_e16384(
         n_e=16384,
         e_dim=4,
         beta=0.25,
+        top_a=64,
         hidden_dim=256,
         num_layers=3,
         shared_codebook=True,
@@ -1957,6 +1960,7 @@ def QINCo_f8_d4_e16384(
                 "n_e": n_e,
                 "e_dim": e_dim,
                 "beta": beta,
+                "top_a": top_a,
                 "hidden_dim": hidden_dim,
                 "num_layers": num_layers,
             }
@@ -1987,6 +1991,7 @@ def QINCo_f16_d8_e16384(
         n_e=16384,
         e_dim=8,
         beta=0.25,
+        top_a=64,
         hidden_dim=256,
         num_layers=3,
         shared_codebook=True,
@@ -2028,6 +2033,7 @@ def QINCo_f16_d8_e16384(
                 "n_e": n_e,
                 "e_dim": e_dim,
                 "beta": beta,
+                "top_a": top_a,
                 "hidden_dim": hidden_dim,
                 "num_layers": num_layers,
             }

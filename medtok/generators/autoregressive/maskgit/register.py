@@ -1,7 +1,7 @@
 import torch 
 import torch.nn as nn
 from medtok.registry import register_model
-from medtok.generators.maskgit.transformer import MaskGIT
+from .transformer import MaskGIT
 from functools import partial
 
 

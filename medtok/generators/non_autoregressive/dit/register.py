@@ -1,7 +1,7 @@
 import torch 
 import torch.nn as nn
 from medtok.registry import register_model
-from medtok.generators.dit.models import DiT
+from .models import DiT
 
 @register_model("dit.xl_1")
 def DiT_XL_1(**kwargs):

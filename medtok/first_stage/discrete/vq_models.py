@@ -58,11 +58,19 @@ class VQModel(nn.Module):
         quant, emb_loss, info = self.quantizer(h)
         return quant, emb_loss, info
 
+    def quantize(self, h):
+        quant, emb_loss, info = self.quantizer(h)
+        return quant, emb_loss, info
+    
     def encode_to_prequant(self, x):
         h = self.encoder(x)
         h = self.quant_conv(h)
-        return h
+        return h, None, None
 
+    def decode_from_prequant(self, h):
+        quant, emb_loss, info = self.quantizer(h)
+        return self.decode(quant)
+        
     def decode(self, quant):
         quant = self.post_quant_conv(quant)
         dec = self.decoder(quant)

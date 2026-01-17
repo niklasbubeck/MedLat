@@ -1,10 +1,26 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Mapping
+from typing import Any, Mapping, Literal
 
 import torch
+import torch.nn as nn
 
+
+def get_model_type(model: nn.Module) -> Literal["continuous", "discrete", "token", "autoregressive", "non-autoregressive"]:
+    module_path = model.__class__.__module__
+    if "first_stage.continuous" in module_path:
+        return "continuous"
+    elif "first_stage.discrete" in module_path:
+        return "discrete"
+    elif "first_stage.token" in module_path:
+        return "token"
+    elif "generators.autoregressive" in module_path:
+        return "autoregressive"
+    elif "generators.non_autoregressive" in module_path:
+        return "non-autoregressive"
+    else:
+        raise ValueError(f"Unknown model type: {module_path}")
 
 def init_from_ckpt(model, path: str, weights_only: bool = False) -> None:
     """

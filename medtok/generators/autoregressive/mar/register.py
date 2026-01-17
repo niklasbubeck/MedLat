@@ -3,7 +3,7 @@ import torch.nn as nn
 from functools import partial
 
 from medtok.registry import register_model
-from medtok.generators.mar.mar import MAR
+from .mar import MAR
 
 @register_model("mar.b")
 def MAR_B(**kwargs):

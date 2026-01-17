@@ -1,5 +1,2 @@
-from .dit import *
-from .mar import *
-from .adm import *
-from .ldm import *
-from .maskgit import *
+from .autoregressive import *
+from .non_autoregressive import *
