@@ -1153,7 +1153,7 @@ class LookupFreeQuantizer(torch.nn.Module):
         self,
         token_bits: int = 10,
         commitment_cost: float = 0.25,
-        entropy_loss_weight: float = 0.1,
+        entropy_loss_weight: float = 0.02,    # from MaskBIT  https://github.com/markweberdev/maskbit/blob/main/configs/tokenizer/maskbit_tokenizer_10bit.yaml
         entropy_loss_temperature: float = 0.01,
         entropy_gamma: float = 1.0,
     ):

@@ -142,12 +142,12 @@ class GenWrapper(nn.Module):
     # ---------------------------------------------------------------------
     # Decoding
     # ---------------------------------------------------------------------
-    def vae_decode(self, z: torch.Tensor) -> torch.Tensor:
+    def vae_decode(self, z: torch.Tensor, out_shape = None) -> torch.Tensor:
         if self.first_stage is None:
             return z
         
         if self.generator_type == "autoregressive" and self.first_stage_type == "discrete":
-            return self.fcn_decode(z, out_shape=self.quant_shape)
+            return self.fcn_decode(z, out_shape=out_shape if out_shape is not None else self.quant_shape)
         else:
             return self.fcn_decode(z / self.scale_factor)
 
