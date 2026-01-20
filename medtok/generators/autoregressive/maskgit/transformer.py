@@ -182,6 +182,7 @@ class MaskGIT(nn.Module):
         self.mask_token_label = vocab_size - 1
         self.label_drop_prob = label_drop_prob
         self.dataset_label_drop_prob = dataset_label_drop_prob
+        print(f"Dataset label drop probability: {dataset_label_drop_prob}")
 
         self.token_emb = BertEmbeddings(vocab_size=vocab_size,
                                         hidden_size=embed_dim,

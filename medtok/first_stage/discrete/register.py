@@ -1823,6 +1823,18 @@ def RQVAE_f16_d8_e16384(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
+@register_model(f"discrete.rsimple_qinco.f4_d3_e8192")
+def RSimpleQINCo_f4_d3_e8192(**kwargs):
+    return RQVAE_f4_d3_e8192(**kwargs, quantizer_class=SimpleQINCo)
+
+@register_model(f"discrete.rsimple_qinco.f8_d4_e16384")
+def RSimpleQINCo_f8_d4_e16384(**kwargs):
+    return RQVAE_f8_d4_e16384(**kwargs, quantizer_class=SimpleQINCo)
+
+@register_model(f"discrete.rsimple_qinco.f16_d8_e16384")
+def RSimpleQINCo_f16_d8_e16384(**kwargs):
+    return RQVAE_f16_d8_e16384(**kwargs, quantizer_class=SimpleQINCo)
+
 
 @register_model(f"discrete.qinco.f4_d3_e8192")
 def QINCo_f4_d3_e8192(
