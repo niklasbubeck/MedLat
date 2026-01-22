@@ -383,7 +383,7 @@ def LFQ_f16_d10_b10(
         # --- quantizer config ---
         token_bits=10,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -448,7 +448,7 @@ def LFQ_f16_d12_b12(
         # --- quantizer config ---
         token_bits=12,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -513,7 +513,7 @@ def LFQ_f16_d14_b14(
         # --- quantizer config ---
         token_bits=14,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -579,7 +579,7 @@ def LFQ_f16_d16_b16(
         # --- quantizer config ---
         token_bits=16,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -644,7 +644,7 @@ def LFQ_f16_d18_b18(
         # --- quantizer config ---
         token_bits=18,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -1312,7 +1312,7 @@ def BSQ_f16_d10_b10(
         # --- quantizer config ---
         token_bits=10,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -1377,7 +1377,7 @@ def BSQ_f16_d12_b12(
         # --- quantizer config ---
         token_bits=12,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -1442,7 +1442,7 @@ def BSQ_f16_d14_b14(
         # --- quantizer config ---
         token_bits=14,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -1508,7 +1508,7 @@ def BSQ_f16_d16_b16(
         # --- quantizer config ---
         token_bits=16,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
@@ -1573,7 +1573,7 @@ def BSQ_f16_d18_b18(
         # --- quantizer config ---
         token_bits=18,
         commitment_cost=0.25,
-        entropy_loss_weight=0.2,
+        entropy_loss_weight=0.02,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
         **kwargs
