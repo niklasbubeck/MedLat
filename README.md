@@ -1,4 +1,4 @@
-# MedTok: First Stage Models Overview
+# MedLat: First Stage Models Overview
 
 A comprehensive collection of quantizers, continuous autoencoders, and tokenizers for medical imaging and general visual data processing. This framework provides a unified interface for first-stage models used in generative modeling pipelines.
 
@@ -230,11 +230,11 @@ TiTok provides learned, low-dimensional tokenization with sparse codebook usage.
 - Compatible with pretrained VQGAN tokenizers
 - Two-stage training support
 
-### MedTok
+### MedLat
 
-**Location:** `token/medtok/medtok.py`
+**Location:** `medlat/first_stage/token/`
 
-**Registry:** `token.medtok.standard`
+**Registry:** `token.medlat.standard`
 
 Medical imaging optimized tokenizer based on DeTok architecture.
 

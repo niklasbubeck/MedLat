@@ -1,4 +1,4 @@
-# MedTok Project Page
+# MedLat Project Page
 
 This folder is the source for the [GitHub Pages](https://pages.github.com/) project site.  
 **Template:** [Nerfies](https://github.com/nerfies/nerfies.github.io) (CC BY-SA 4.0).
@@ -6,7 +6,7 @@ This folder is the source for the [GitHub Pages](https://pages.github.com/) proj
 ## Setup Instructions
 
 1. **Enable GitHub Pages** (one-time):
-   - Go to your repo: `https://github.com/YOUR_USERNAME/MedTok`
+   - Go to your repo: `https://github.com/YOUR_USERNAME/MedLat`
    - Click **Settings** → **Pages** (under "Code and automation")
    - Under "Build and deployment" → "Source": select **Deploy from a branch**
    - Branch: `main` (or your default branch)
@@ -20,7 +20,7 @@ This folder is the source for the [GitHub Pages](https://pages.github.com/) proj
 
 3. **Deploy**: Push changes to `main`. The site will be live at:
    ```
-   https://YOUR_USERNAME.github.io/MedTok/
+   https://YOUR_USERNAME.github.io/MedLat/
    ```
 
 ## Structure
