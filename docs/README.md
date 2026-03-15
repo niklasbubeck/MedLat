@@ -1,6 +1,7 @@
 # MedTok Project Page
 
-This folder is the source for the [GitHub Pages](https://pages.github.com/) project site.
+This folder is the source for the [GitHub Pages](https://pages.github.com/) project site.  
+**Template:** [Nerfies](https://github.com/nerfies/nerfies.github.io) (CC BY-SA 4.0).
 
 ## Setup Instructions
 
@@ -13,16 +14,16 @@ This folder is the source for the [GitHub Pages](https://pages.github.com/) proj
    - Click **Save**
 
 2. **Update links** in `index.html`:
-   - Replace `YOUR_USERNAME` in the Code link with your GitHub username
-   - Add the arXiv link when the paper is published
+   - Replace `YOUR_USERNAME` with your GitHub username (3 places)
+   - Add Paper and arXiv URLs when published
+   - Add author names and affiliations
 
 3. **Deploy**: Push changes to `main`. The site will be live at:
    ```
    https://YOUR_USERNAME.github.io/MedTok/
    ```
 
-## Customization
+## Structure
 
-- Edit `index.html` to update content, add figures, or change styling
-- Add more pages (e.g., `results.html`, `citation.html`) and link to them
-- Copy figures from `latex/figures/` into `docs/figures/` and reference them
+- `index.html` — Main page (hero, teaser, carousel, abstract, BibTeX)
+- `static/` — CSS (Bulma), JS, images, figures from `results/figures/`

@@ -1,81 +1,223 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="description"
+        content="MedTok: The first comprehensive benchmark for medical image tokenization. Evaluates 15+ tokenizers across 12 MedMNIST datasets.">
+  <meta name="keywords" content="MedTok, medical imaging, tokenization, VAE, VQ-VAE, benchmark">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MedTok: The Anatomy of Medical Image Tokenization</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
-  <style>
-    :root {
-      --bg: #0f1419;
-      --surface: #1a2332;
-      --text: #e6edf3;
-      --primary: #58a6ff;
-      --accent: #7ee787;
-    }
-    * { box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem;
-    }
-    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
-    .subtitle { color: #8b949e; font-size: 1rem; margin-bottom: 2rem; }
-    .badge { display: inline-block; background: var(--primary); color: #fff; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.85rem; margin-right: 0.5rem; }
-    .links { margin: 1.5rem 0; }
-    .links a { color: var(--primary); text-decoration: none; margin-right: 1rem; }
-    .links a:hover { text-decoration: underline; }
-    section { margin: 2rem 0; }
-    section h2 { font-size: 1.2rem; color: var(--accent); margin-bottom: 0.8rem; }
-    .abstract { background: var(--surface); padding: 1.2rem; border-radius: 8px; font-size: 0.95rem; }
-    ul { padding-left: 1.2rem; }
-    .findings { display: grid; gap: 0.8rem; }
-    .finding { background: var(--surface); padding: 1rem; border-radius: 6px; border-left: 3px solid var(--primary); }
-    footer { margin-top: 3rem; font-size: 0.85rem; color: #8b949e; }
-  </style>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+  <link rel="icon" href="./static/images/favicon.svg">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
 </head>
 <body>
-  <h1>MedTok</h1>
-  <p class="subtitle">The Anatomy of Medical Image Tokenization</p>
-  <span class="badge">Benchmark</span>
-  <span class="badge">Medical Imaging</span>
-  <span class="badge">NeurIPS 2025 Datasets & Benchmarks</span>
 
-  <div class="links">
-    <a href="https://github.com/niklasbubeck/MedTok">Code</a>
-    <a href="#">Paper (arXiv)</a>
-    <a href="https://medmnist.com/">MedMNIST</a>
+<nav class="navbar" role="navigation" aria-label="main navigation">
+  <div class="navbar-brand">
+    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </a>
   </div>
-
-  <section>
-    <h2>Abstract</h2>
-    <div class="abstract">
-      Medical image generation and analysis increasingly rely on tokenization—mapping images to compact latent representations. Recent work on natural images has revealed fundamental tensions: reconstruction FID (rFID) is often poorly correlated with generation FID (gFID); increasing latent dimension improves reconstruction but hurts generation; alignment strategies yield mixed results. Yet all such findings stem from ImageNet-scale natural imagery. The design space of tokenizers for <em>medical</em> imaging remains underexplored, with no systematic benchmark to guide practitioners. We present <strong>MedTok</strong>, a comprehensive benchmark evaluating 15+ tokenizers across 12 MedMNIST datasets, spanning continuous VAEs, discrete quantizers, and alignment strategies. Our key findings: (1) In medical imaging, rFID correlates strongly with gFID (Pearson r ≈ 0.79); (2) RQVAE, SimQinco, and SimVQ dominate discrete tokenizers; (3) alignment improves reconstruction but degrades generation; (4) larger latent dimensions hurt generation.
+  <div class="navbar-menu">
+    <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
+      <a class="navbar-item" href="https://github.com/YOUR_USERNAME/MedTok">
+        <span class="icon">
+          <i class="fas fa-home"></i>
+        </span>
+      </a>
     </div>
-  </section>
+  </div>
+</nav>
 
-  <section>
-    <h2>Key Findings</h2>
-    <div class="findings">
-      <div class="finding"><strong>rFID predicts generation.</strong> Unlike natural images, rFID correlates strongly with gFID (r ≈ 0.79) in medical imaging.</div>
-      <div class="finding"><strong>RQVAE, SimQinco, SimVQ</strong> lead discrete tokenizers in reconstruction and compression efficiency.</div>
-      <div class="finding"><strong>Alignment</strong> (MedVAE, VAVAE) improves reconstruction but neither improves generation; VAEKL remains a strong baseline.</div>
-      <div class="finding"><strong>Larger latent dimensions</strong> degrade generation; use moderate d (5–15) for generation-oriented pipelines.</div>
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-1 publication-title">MedTok: The Anatomy of Medical Image Tokenization</h1>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">Authors</span>
+          </div>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">NeurIPS 2025 Datasets & Benchmarks Track</span>
+          </div>
+
+          <div class="column has-text-centered">
+            <div class="publication-links">
+              <span class="link-block">
+                <a href="#"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+              <span class="link-block">
+                <a href="#"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>
+              <span class="link-block">
+                <a href="https://github.com/YOUR_USERNAME/MedTok"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                </a>
+              </span>
+              <span class="link-block">
+                <a href="https://medmnist.com/"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="far fa-images"></i>
+                  </span>
+                  <span>MedMNIST</span>
+                </a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section>
-    <h2>Getting Started</h2>
-    <pre style="background: var(--surface); padding: 1rem; border-radius: 6px; overflow-x: auto;"><code>pip install medtok
-# See README for full usage</code></pre>
-  </section>
+<section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+      <img src="./static/images/figures/correlations_overall_bar.png" alt="rFID correlates strongly with gFID" style="max-width: 100%; border-radius: 8px;">
+      <h2 class="subtitle has-text-centered">
+        <span class="dnerf">MedTok</span> benchmarks first-stage tokenizers across 12 MedMNIST datasets.
+        rFID correlates strongly with gFID (Pearson r ≈ 0.79) in medical imaging.
+      </h2>
+    </div>
+  </div>
+</section>
 
-  <footer>
-    MedTok — First comprehensive benchmark for medical image tokenization. NeurIPS 2025 Datasets & Benchmarks Track.
-  </footer>
+
+<section class="hero is-light is-small">
+  <div class="hero-body">
+    <div class="container">
+      <div id="results-carousel" class="carousel results-carousel">
+        <div class="item">
+          <img src="./static/images/figures/reconstruction_vs_generation_rfid_gfid.png" alt="rFID vs gFID">
+        </div>
+        <div class="item">
+          <img src="./static/images/figures/compression_bpp.png" alt="Compression efficiency">
+        </div>
+        <div class="item">
+          <img src="./static/images/figures/alignment_impact.png" alt="Alignment impact">
+        </div>
+        <div class="item">
+          <img src="./static/images/figures/feature_dimension_impact.png" alt="Feature dimension">
+        </div>
+        <div class="item">
+          <img src="./static/images/figures/codebook_statistics.png" alt="Codebook statistics">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            Medical image generation and analysis increasingly rely on tokenization—mapping images to compact latent representations. Recent work on natural images has revealed fundamental tensions: reconstruction FID (rFID) is often poorly correlated with generation FID (gFID); increasing latent dimension improves reconstruction but hurts generation; alignment strategies yield mixed results. Yet all such findings stem from ImageNet-scale natural imagery.
+          </p>
+          <p>
+            The design space of tokenizers for <em>medical</em> imaging remains underexplored, with no systematic benchmark to guide practitioners. We present <span class="dnerf">MedTok</span>, a comprehensive benchmark evaluating 15+ tokenizers across 12 MedMNIST datasets, spanning continuous VAEs (VAEKL, MedVAE, VAVAE), discrete quantizers (VQGAN, RQVAE, SimQinco, SimVQ, BSQ, LFQ), and alignment strategies.
+          </p>
+          <p>
+            Our key findings: (1) In medical imaging, rFID correlates strongly with gFID (Pearson r ≈ 0.79), contrasting with natural-image reports; (2) RQVAE, SimQinco, and SimVQ dominate discrete tokenizers in compression efficiency; (3) alignment improves reconstruction for MedVAE but degrades generation for both MedVAE and VAVAE; (4) larger latent dimensions hurt generation, consistent with the reconstruction–generation dilemma; (5) codebook statistics reveal distinct behaviors under compression.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3">Key Findings</h2>
+        <div class="content has-text-justified">
+          <ul>
+            <li><strong>rFID predicts generation.</strong> Pearson r ≈ 0.79; optimize rFID when generation is the goal. Unlike natural-image reports, rFID correlates well with gFID in medical imaging.</li>
+            <li><strong>RQVAE, SimQinco, SimVQ</strong> lead discrete tokenizers in reconstruction and compression efficiency.</li>
+            <li><strong>Alignment</strong> (MedVAE) improves reconstruction but neither MedVAE nor VAVAE improves generation; VAEKL remains a strong baseline.</li>
+            <li><strong>Larger latent dimensions</strong> degrade generation; use moderate d (5–15) for generation-oriented pipelines.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section class="section" id="BibTeX">
+  <div class="container is-max-desktop content">
+    <h2 class="title">BibTeX</h2>
+    <pre><code>@inproceedings{medtok2025,
+  title     = {MedTok: The Anatomy of Medical Image Tokenization},
+  author    = {},
+  booktitle = {NeurIPS},
+  year      = {2025},
+  note      = {Datasets and Benchmarks Track},
+}</code></pre>
+  </div>
+</section>
+
+
+<footer class="footer">
+  <div class="container">
+    <div class="content has-text-centered">
+      <a class="icon-link" href="https://github.com/YOUR_USERNAME/MedTok">
+        <i class="fab fa-github"></i>
+      </a>
+    </div>
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+          <p>
+            This website is licensed under a <a rel="license"
+                                                href="http://creativecommons.org/licenses/by-sa/4.0/">Creative
+            Commons Attribution-ShareAlike 4.0 International License</a>.
+          </p>
+          <p>
+            Template borrowed from <a href="https://github.com/nerfies/nerfies.github.io">Nerfies</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
 </body>
 </html>
