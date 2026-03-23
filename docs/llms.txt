@@ -1,0 +1,25 @@
+# MedLat (MedTok workspace)
+
+> Unified PyTorch library for first-stage models (tokenizers, continuous/discrete autoencoders, quantizers) and second-stage generators (autoregressive MaskGIT/MAR, diffusion DiT/LDM/ADM). Single string-key model registry: `get_model`, `available_models`, `get_model_info`.
+
+## Primary sources
+- Repository: https://github.com/niklasbubeck/MedLat
+- Human README: https://github.com/niklasbubeck/MedLat/blob/main/README.md
+- Package name (pip): `medlat` (see pyproject.toml)
+
+## Registry prefixes (families)
+- `token.*` — TiTok, MAETok, VMAE, DeTok, SoftVQ, ViTA
+- `continuous.*` — AEKL, MAISI, MedVAE, VAVAE, DCAE, soft VQ / WQ-VAE
+- `discrete.*` — VQ, RQ/QINCo family, FSQ, LFQ, BSQ, SimVQ, HCVQ, MaskGIT VQ presets
+- `discrete.quantizer.*` — standalone quantizer modules
+- `maskgit.*`, `mar.*` — autoregressive generators
+- `dit.*`, `ldm.*`, `adm.*` — latent diffusion / UNet generators
+
+## Integration
+- Glue module: `medlat.modules.wrapper.GenWrapper` pairs generator + first stage; respects discrete/continuous and autoregressive/non-autoregressive routes.
+
+## License
+MIT — see repository pyproject.toml
+
+## Contact
+Author: Niklas Bubeck (see pyproject.toml authors)

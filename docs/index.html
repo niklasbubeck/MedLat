@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="x-ua-compatible" content="IE=edge" />
+
+  <!-- Primary SEO -->
+  <title>MedLat — Medical imaging tokenizers, VAEs &amp; latent generators (PyTorch)</title>
+  <meta name="title" content="MedLat — Medical imaging tokenizers, VAEs &amp; latent generators (PyTorch)" />
+  <meta name="description" content="MedLat (medlat) is a PyTorch library with a unified model registry for first-stage models—tokenizers, continuous and discrete autoencoders, quantizers—and generators including MaskGIT, MAR, DiT, LDM, and ADM. Built for medical imaging and visual data." />
+  <meta name="keywords" content="MedLat, MedTok, medical imaging, PyTorch, tokenizer, VAE, VQ-VAE, latent diffusion, DiT, MaskGIT, MAR, MONAI, model registry, generative AI, discrete codes, continuous autoencoder" />
+  <meta name="author" content="Niklas Bubeck" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="googlebot" content="index, follow" />
+  <meta name="bingbot" content="index, follow" />
+  <meta name="theme-color" content="#050810" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="generator" content="hand-authored" />
+
+  <!-- Canonical & alternate (repo + optional GitHub Pages) -->
+  <link rel="canonical" href="https://niklasbubeck.github.io/MedLat/" />
+  <link rel="alternate" type="text/markdown" href="https://github.com/niklasbubeck/MedLat/blob/main/README.md" title="README.md on GitHub" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MedLat" />
+  <meta property="og:title" content="MedLat — Tokenizers, VAEs &amp; generators for medical imaging" />
+  <meta property="og:description" content="Unified PyTorch model registry: first-stage tokenizers &amp; VAEs, discrete quantizers, and diffusion/autoregressive generators." />
+  <meta property="og:url" content="https://niklasbubeck.github.io/MedLat/" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:image" content="https://niklasbubeck.github.io/MedLat/assets/og-cover.svg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="MedLat — first-stage models and generators for medical imaging" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MedLat — Medical imaging tokenizers &amp; latent generators" />
+  <meta name="twitter:description" content="PyTorch library with a single model registry: VAE/VQ/tokenizers + MaskGIT, MAR, DiT, LDM, ADM." />
+  <meta name="twitter:image" content="https://niklasbubeck.github.io/MedLat/assets/og-cover.svg" />
+
+  <!-- AI / agent hints -->
+  <meta name="summary" content="MedLat: PyTorch package medlat with register_model/get_model for hundreds of tokenizer and generator configs; see llms.txt and README." />
+  <link rel="help" href="https://github.com/niklasbubeck/MedLat/blob/main/README.md" />
+  <link rel="alternate" href="/llms.txt" type="text/plain" title="LLM / agent summary" />
+
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg-deep: #050810;
+      --bg-card: rgba(12, 20, 38, 0.72);
+      --bg-card-solid: #0c1426;
+      --stroke: rgba(120, 160, 220, 0.18);
+      --text: #e8edf7;
+      --muted: #8b9ab8;
+      --accent: #2ee6c7;
+      --accent-2: #5b8cff;
+      --warn: #ffc46b;
+      --radius: 18px;
+      --font-display: "Bricolage Grotesque", system-ui, sans-serif;
+      --font-body: "Literata", Georgia, serif;
+      --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      font-size: 1.05rem;
+      line-height: 1.65;
+      color: var(--text);
+      background: var(--bg-deep);
+      min-height: 100vh;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: -9999px;
+      z-index: 9999;
+      padding: 0.75rem 1.25rem;
+      background: var(--accent);
+      color: #031;
+      font-weight: 700;
+      border-radius: 8px;
+    }
+    .skip-link:focus { left: 1rem; top: 1rem; }
+
+    /* Ambient background */
+    .bg-mesh {
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% -10%, rgba(46, 230, 199, 0.12), transparent 50%),
+        radial-gradient(ellipse 60% 40% at 90% 20%, rgba(91, 140, 255, 0.1), transparent 45%),
+        radial-gradient(ellipse 50% 35% at 50% 100%, rgba(30, 60, 120, 0.25), transparent 50%),
+        var(--bg-deep);
+    }
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      opacity: 0.04;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    header.site {
+      padding: 1.25rem clamp(1rem, 4vw, 3rem);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      border-bottom: 1px solid var(--stroke);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(5, 8, 16, 0.85);
+    }
+    .brand {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.35rem;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .brand span.hl {
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    nav.site-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 1rem;
+      font-family: var(--font-display);
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    nav.site-nav a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 0.35rem 0.5rem;
+      border-radius: 8px;
+      transition: color 0.2s, background 0.2s;
+    }
+    nav.site-nav a:hover, nav.site-nav a:focus-visible {
+      color: var(--accent);
+      background: rgba(46, 230, 199, 0.08);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 0.92rem;
+      padding: 0.65rem 1.15rem;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.15s, box-shadow 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #1bc4a8);
+      color: #021a16;
+      box-shadow: 0 8px 32px rgba(46, 230, 199, 0.25);
+    }
+    .btn-primary:hover { transform: translateY(-1px); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--stroke);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    main { padding-bottom: 4rem; }
+
+    .hero {
+      padding: clamp(2.5rem, 8vw, 5rem) clamp(1rem, 4vw, 3rem) 3rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: clamp(2.4rem, 6vw, 3.6rem);
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+      margin: 0 0 1rem;
+    }
+    .hero .lede {
+      font-size: clamp(1.1rem, 2.2vw, 1.35rem);
+      color: var(--muted);
+      max-width: 52ch;
+      margin: 0 0 1.75rem;
+    }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 2rem;
+    }
+    .pill {
+      font-family: var(--font-display);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.4rem 0.75rem;
+      border-radius: 999px;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      color: var(--muted);
+    }
+
+    section.block {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2.5rem clamp(1rem, 4vw, 3rem);
+    }
+    section.block h2 {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    section.block h2::before {
+      content: "";
+      width: 4px;
+      height: 1.1em;
+      border-radius: 4px;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    }
+    section.block h3 {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin: 2rem 0 0.75rem;
+      color: var(--warn);
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 1.35rem 1.5rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      margin: 1rem 0;
+    }
+    table.data th, table.data td {
+      text-align: left;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid var(--stroke);
+      vertical-align: top;
+    }
+    table.data th {
+      font-family: var(--font-display);
+      font-weight: 700;
+      color: var(--accent);
+      width: 22%;
+    }
+    table.data code {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: #a8d4ff;
+      word-break: break-all;
+    }
+
+    pre.code {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.55;
+      background: #060a14;
+      border: 1px solid var(--stroke);
+      border-radius: 12px;
+      padding: 1.1rem 1.25rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    pre.code .k { color: #7fdbca; }
+    pre.code .s { color: #a8d4ff; }
+    pre.code .c { color: #6b7a99; }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .mini-card {
+      background: var(--bg-card-solid);
+      border: 1px solid var(--stroke);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+    }
+    .mini-card strong {
+      font-family: var(--font-display);
+      display: block;
+      font-size: 0.95rem;
+      margin-bottom: 0.35rem;
+      color: var(--text);
+    }
+    .mini-card span { font-size: 0.88rem; color: var(--muted); }
+
+    footer.site {
+      border-top: 1px solid var(--stroke);
+      padding: 2rem clamp(1rem, 4vw, 3rem);
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    footer.site a { color: var(--accent); }
+
+    .faq details {
+      background: var(--bg-card-solid);
+      border: 1px solid var(--stroke);
+      border-radius: 12px;
+      margin-bottom: 0.6rem;
+      padding: 0.75rem 1rem;
+    }
+    .faq summary {
+      font-family: var(--font-display);
+      font-weight: 700;
+      cursor: pointer;
+      list-style: none;
+    }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq details[open] summary { margin-bottom: 0.5rem; color: var(--accent); }
+    .faq p { margin: 0; font-size: 0.95rem; color: var(--muted); }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .btn-primary:hover { transform: none; }
+    }
+  </style>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareSourceCode",
+        "name": "MedLat",
+        "alternateName": ["medlat", "MedTok"],
+        "description": "PyTorch library for first-stage models (tokenizers, VAEs, quantizers) and second-stage generators (MaskGIT, MAR, DiT, LDM, ADM) with a unified model registry.",
+        "license": "https://opensource.org/licenses/MIT",
+        "codeRepository": "https://github.com/niklasbubeck/MedLat",
+        "url": "https://niklasbubeck.github.io/MedLat/",
+        "programmingLanguage": "Python",
+        "runtimePlatform": "PyTorch",
+        "author": {
+          "@type": "Person",
+          "name": "Niklas Bubeck"
+        },
+        "keywords": "medical imaging, PyTorch, tokenizer, VAE, VQ, latent diffusion, DiT, MaskGIT, MAR, MONAI",
+        "applicationCategory": "DeveloperApplication"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://niklasbubeck.github.io/MedLat/#website",
+        "name": "MedLat",
+        "url": "https://niklasbubeck.github.io/MedLat/",
+        "description": "Project page for the MedLat PyTorch library: model registry, documentation summary, and links.",
+        "publisher": {
+          "@type": "Organization",
+          "name": "MedLat",
+          "url": "https://niklasbubeck.github.io/MedLat/"
+        }
+      },
+      {
+        "@type": "WebPage",
+        "name": "MedLat — Medical imaging tokenizers, VAEs & latent generators",
+        "url": "https://niklasbubeck.github.io/MedLat/",
+        "isPartOf": { "@id": "https://niklasbubeck.github.io/MedLat/#website" },
+        "about": { "@id": "https://github.com/niklasbubeck/MedLat" },
+        "inLanguage": "en-US"
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is MedLat?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "MedLat is a PyTorch package (import name medlat) that registers hundreds of first-stage models and generators behind string IDs. You use get_model, available_models, and get_model_info to instantiate architectures and read metadata."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What model families are included?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Tokenizers include TiTok, MAETok, VMAE, DeTok, SoftVQ, and ViTA. Continuous models include AEKL, MAISI, MedVAE, VAVAE, DCAE, and soft VQ variants. Discrete models include VQ, RQ, QINCo family, FSQ, LFQ, BSQ, SimVQ, and HCVQ. Generators include MaskGIT, MAR, DiT, LDM, and ADM."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I install MedLat?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Clone the repository and run pip install -e . from the project root. Dependencies include PyTorch, NumPy, Einops, timm, OmegaConf, and MONAI; see pyproject.toml."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <div class="bg-mesh" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site" role="banner">
+    <a class="brand" href="./" aria-current="page">Med<span class="hl">Lat</span></a>
+    <nav class="site-nav" aria-label="Page sections">
+      <a href="#overview">Overview</a>
+      <a href="#install">Install</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#families">Model families</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div>
+      <a class="btn btn-primary" href="https://github.com/niklasbubeck/MedLat">GitHub</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <h1 id="hero-title">Latent models for <span style="color: var(--accent);">medical</span> imaging &amp; visual AI</h1>
+      <p class="lede">
+        <strong>MedLat</strong> (<code style="font-family:var(--font-mono);font-size:0.95em;color:var(--accent);">medlat</code>) unifies
+        first-stage tokenizers and autoencoders with second-stage generators behind one
+        <strong>model registry</strong>—instantiate by ID, list configs, and attach papers or upstream code when available.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/niklasbubeck/MedLat">View repository</a>
+        <a class="btn btn-ghost" href="./llms.txt">llms.txt (for agents)</a>
+      </div>
+      <div class="pill-row" aria-label="Technology tags">
+        <span class="pill">PyTorch</span>
+        <span class="pill">Model registry</span>
+        <span class="pill">VQ / VAE / DiT</span>
+        <span class="pill">MONAI</span>
+        <span class="pill">MIT License</span>
+      </div>
+    </section>
+
+    <section class="block" id="overview" aria-labelledby="h-overview">
+      <h2 id="h-overview">What this project contains</h2>
+      <p>
+        Typical workflow: <strong>train or load a first-stage model</strong> → <strong>attach a generator</strong> whose tensor geometry matches
+        the tokenizer or VAE (<code>num_tokens</code>, <code>embed_dim</code>, <code>seq_len</code>, stride, etc.) → <strong>sample or train</strong> using the bundled notebooks.
+      </p>
+      <div class="grid-3" style="margin-top:1.25rem">
+        <article class="mini-card">
+          <strong>First stage</strong>
+          <span>Maps images to compact representations: continuous latents, discrete codes, or token sequences.</span>
+        </article>
+        <article class="mini-card">
+          <strong>Generator</strong>
+          <span>Models the distribution in that space—MaskGIT, MAR, DiT, LDM-style UNet, or ADM.</span>
+        </article>
+        <article class="mini-card">
+          <strong>Utilities</strong>
+          <span>Gaussian diffusion helpers, ViT cores, foundation alignments, and <code>GenWrapper</code> for wiring.</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="block" id="install" aria-labelledby="h-install">
+      <h2 id="h-install">Installation</h2>
+      <div class="card">
+        <pre class="code" tabindex="0"><span class="c"># Editable install from repository root</span>
+pip install -e .</pre>
+        <p style="margin:0;color:var(--muted);font-size:0.95rem;">
+          Core dependencies: PyTorch, NumPy, Einops, timm, OmegaConf, MONAI. Optional <code>[dev]</code> extras in <code>pyproject.toml</code>.
+          Some quantizer paths may require additional packages (e.g. wavelets).
+        </p>
+      </div>
+    </section>
+
+    <section class="block" id="quickstart" aria-labelledby="h-quick">
+      <h2 id="h-quick">Quick start</h2>
+      <pre class="code" tabindex="0"><span class="k">from</span> medlat <span class="k">import</span> available_models, get_model, GenWrapper
+<span class="k">from</span> medlat <span class="k">import</span> get_model_info
+
+<span class="c"># Discover registered IDs</span>
+<span class="k">print</span>(<span class="k">list</span>(available_models()))
+
+<span class="c"># Metadata: description, paper_url, code_url when set</span>
+<span class="k">print</span>(get_model_info(<span class="s">"continuous.aekl.f8_d16"</span>))
+
+tokenizer = get_model(<span class="s">"token.titok.s_128"</span>, img_size=<span class="s">128</span>, dims=<span class="s">2</span>)
+
+generator = get_model(
+    <span class="s">"maskgit.b"</span>,
+    img_size=<span class="s">128</span>,
+    seq_len=tokenizer.num_latent_tokens,
+    num_tokens=tokenizer.n_embed,
+    in_channels=tokenizer.embed_dim,
+)
+
+wrapper = GenWrapper(generator, tokenizer)</pre>
+      <p style="color:var(--muted);font-size:0.95rem;">
+        <code>GenWrapper</code> selects encode/decode paths from discrete vs continuous first stages and autoregressive vs non-autoregressive generators
+        (see <code>medlat/modules/wrapper.py</code>).
+      </p>
+    </section>
+
+    <section class="block" id="layout" aria-labelledby="h-layout">
+      <h2 id="h-layout">Package layout</h2>
+      <div class="card" style="overflow-x:auto">
+        <table class="data" role="table" aria-label="medlat directory map">
+          <thead>
+            <tr><th scope="col">Path</th><th scope="col">Contents</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row"><code>medlat/registry.py</code></th><td>Registry API: <code>register_model</code>, <code>get_model</code>, <code>available_models</code>, <code>get_model_info</code>.</td></tr>
+            <tr><th scope="row"><code>medlat/first_stage/continuous/</code></th><td>KL autoencoders, MAISI, MedVAE, VAVAE, DCAE, soft-VQ / WQ-VAE builders.</td></tr>
+            <tr><th scope="row"><code>medlat/first_stage/discrete/</code></th><td>VQ, RQ, FSQ, LFQ, BSQ, QINCo-family, MaskGIT VQ presets.</td></tr>
+            <tr><th scope="row"><code>medlat/first_stage/discrete/quantizer/</code></th><td>Standalone quantizers under <code>discrete.quantizer.*</code>.</td></tr>
+            <tr><th scope="row"><code>medlat/first_stage/token/</code></th><td>TiTok, MAETok, VMAE, DeTok, SoftVQ, ViTA.</td></tr>
+            <tr><th scope="row"><code>medlat/generators/autoregressive/</code></th><td>MaskGIT, MAR.</td></tr>
+            <tr><th scope="row"><code>medlat/generators/non_autoregressive/</code></th><td>DiT, LDM UNet, ADM.</td></tr>
+            <tr><th scope="row"><code>medlat/diffusion/</code></th><td><code>create_gaussian_diffusion</code>, schedules, resampling.</td></tr>
+            <tr><th scope="row"><code>medlat/modules/</code></th><td><code>GenWrapper</code>, ViT cores, positional embeddings, alignments.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="naming" aria-labelledby="h-name">
+      <h2 id="h-name">Registry ID conventions</h2>
+      <ul style="color:var(--muted);margin:0;padding-left:1.25rem">
+        <li><strong style="color:var(--text)"><code>f{N}</code></strong> — spatial downsampling factor at the bottleneck.</li>
+        <li><strong style="color:var(--text)"><code>d{N}</code></strong> — latent width / embedding dimension (family-specific).</li>
+        <li><strong style="color:var(--text)"><code>e{N}</code></strong> — codebook size for vector quantization.</li>
+        <li><strong style="color:var(--text)"><code>l{N}</code> / <code>b{N}</code></strong> — levels or bit width (FSQ, LFQ, BSQ).</li>
+        <li><strong style="color:var(--text)">Scale tags</strong> — <code>s</code> / <code>b</code> / <code>l</code> / <code>xl</code> for depth in several families.</li>
+      </ul>
+    </section>
+
+    <section class="block" id="families" aria-labelledby="h-fam">
+      <h2 id="h-fam">Model families (registry)</h2>
+      <p style="color:var(--muted);margin-top:0">Representative IDs—each family exposes many configs. Use <code>available_models("prefix.")</code> to enumerate.</p>
+
+      <h3>A. Tokenizers &amp; patch sequences (<code>token.*</code>)</h3>
+      <div class="card" style="overflow-x:auto">
+        <table class="data">
+          <tbody>
+            <tr><th scope="row">TiTok</th><td>Compact generative tokenization — <code>token.titok.s_128</code>, <code>token.titok.b_128_p8_e2e</code>, …</td></tr>
+            <tr><th scope="row">MAETok</th><td>MAE-style — <code>token.maetok.s_256</code>, <code>token.maetok.b_512_p8</code>, …</td></tr>
+            <tr><th scope="row">VMAE</th><td>ViT/VMAE-style — <code>token.vmae.s_p8_d16</code>, <code>token.vmae.t_p8_d16</code>, …</td></tr>
+            <tr><th scope="row">DeTok</th><td>Scale grid — <code>token.detok.ss</code> … <code>token.detok.xlxl</code></td></tr>
+            <tr><th scope="row">SoftVQ</th><td>Soft VQ tokenizers — <code>token.softvq.s_t32_d32</code>, …</td></tr>
+            <tr><th scope="row">ViTA</th><td><code>token.vita.reconmae</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>B. Continuous autoencoders (<code>continuous.*</code>)</h3>
+      <div class="card" style="overflow-x:auto">
+        <table class="data">
+          <tbody>
+            <tr><th scope="row">AEKL</th><td>LDM-style KL AE — <code>continuous.aekl.f4_d3</code> … <code>continuous.aekl.f32_d64</code></td></tr>
+            <tr><th scope="row">MAISI</th><td>MONAI MAISI-style — <code>continuous.maisi.f4_d3</code></td></tr>
+            <tr><th scope="row">MedVAE</th><td>BiomedCLIP alignment — <code>continuous.medvae.f8_d16</code>, …</td></tr>
+            <tr><th scope="row">VAVAE</th><td>DINOv2 / MAE / BiomedCLIP — <code>continuous.vavae.f8_d32_dinov2</code>, …</td></tr>
+            <tr><th scope="row">DCAE</th><td>EfficientViT DC-AE — <code>continuous.dcae.f32c32</code>, …</td></tr>
+            <tr><th scope="row">Soft VQ / WQ-VAE</th><td><code>continuous.soft_vq.f8_d16_e16384</code>, <code>continuous.wqvae.f8_d4_e16384</code>, …</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>C. Discrete VAEs (<code>discrete.*</code>)</h3>
+      <div class="card" style="overflow-x:auto">
+        <table class="data">
+          <tbody>
+            <tr><th scope="row">VQ / VQGAN-style</th><td><code>discrete.vq.f8_d8_e16384</code>, …</td></tr>
+            <tr><th scope="row">MaskGIT VQ</th><td><code>discrete.maskgit.vq.f16_d256_e1024</code></td></tr>
+            <tr><th scope="row">MS-RQ</th><td><code>discrete.msrq.f16_d32_e4096</code></td></tr>
+            <tr><th scope="row">LFQ / QINCo / RQ / FSQ / BSQ / SimVQ / HCVQ</th><td>Large sweeps — see README and <code>discrete/register.py</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>D–F. Quantizers, autoregressive &amp; diffusion generators</h3>
+      <div class="grid-3">
+        <article class="mini-card">
+          <strong><code>discrete.quantizer.*</code></strong>
+          <span>Composable quantizers: vector, residual, FSQ, LFQ, BSQ, soft VQ, MS-RQ, …</span>
+        </article>
+        <article class="mini-card">
+          <strong>Autoregressive</strong>
+          <span><code>maskgit.b</code>|<code>l</code>|<code>h</code>, <code>mar.b</code>|<code>l</code>|<code>h</code></span>
+        </article>
+        <article class="mini-card">
+          <strong>Non-autoregressive</strong>
+          <span><code>dit.*</code>, <code>ldm.f1</code>–<code>f16</code>, <code>adm.diffusion.*</code>, <code>adm.classifier.*</code></span>
+        </article>
+      </div>
+    </section>
+
+    <section class="block" id="notebooks" aria-labelledby="h-nb">
+      <h2 id="h-nb">Example notebooks</h2>
+      <table class="data card">
+        <tbody>
+          <tr><th scope="row"><code>example_tokenizer.ipynb</code></th><td>Train and use first-stage models.</td></tr>
+          <tr><th scope="row"><code>example_generator_maskgit.ipynb</code></th><td>MaskGIT pipeline.</td></tr>
+          <tr><th scope="row"><code>example_generator_mar.ipynb</code></th><td>MAR pipeline.</td></tr>
+          <tr><th scope="row"><code>example_generator_nonautoregressive.ipynb</code></th><td>DiT / LDM / ADM-style generation.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="block faq" id="faq" aria-labelledby="h-faq">
+      <h2 id="h-faq">FAQ</h2>
+      <details>
+        <summary>What is MedLat?</summary>
+        <p>A PyTorch library that registers first-stage and generator architectures under string IDs. Import <code>medlat</code> and call <code>get_model("registry.id", **kwargs)</code>.</p>
+      </details>
+      <details>
+        <summary>MedTok vs MedLat?</summary>
+        <p>This repository may live in a folder named MedTok; the Python package and remote are <strong>MedLat</strong> / <code>medlat</code>. Treat <code>github.com/niklasbubeck/MedLat</code> as the source of truth.</p>
+      </details>
+      <details>
+        <summary>Where is the full specification?</summary>
+        <p>The canonical narrative document is <a href="https://github.com/niklasbubeck/MedLat/blob/main/README.md">README.md</a> in the repo. This page summarizes it for browsing and SEO.</p>
+      </details>
+      <details>
+        <summary>Machine-readable summary for agents?</summary>
+        <p>See <a href="./llms.txt"><code>llms.txt</code></a> for a compact overview and links.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="site" role="contentinfo">
+    <p>
+      MIT License · MedLat / <code>medlat</code> ·
+      <a href="https://github.com/niklasbubeck/MedLat">GitHub</a>
+      · Structured data (JSON-LD) embedded for search engines.
+    </p>
+  </footer>
+</body>
+</html>

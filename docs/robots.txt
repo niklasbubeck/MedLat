@@ -1,0 +1,6 @@
+# MedLat project site — allow indexing for humans and agents
+User-agent: *
+Allow: /
+
+# Optional: point crawlers to sitemap when hosted (update host if needed)
+Sitemap: https://niklasbubeck.github.io/MedLat/sitemap.xml
