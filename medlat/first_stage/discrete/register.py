@@ -74,15 +74,15 @@ def VQ_f4_d3_e8192(
 
 @register_model(f"discrete.vq.f4_d8_e8192")
 def VQ_f4_d8_e8192(**kwargs):
-    return VQ_f4_d3_e8192(z_channels=8, **kwargs)
+    return VQ_f4_d3_e8192(z_channels=8, e_dim=8, **kwargs)
 
 @register_model(f"discrete.vq.f4_d16_e8192")
 def VQ_f4_d16_e8192(**kwargs):
-    return VQ_f4_d3_e8192(z_channels=16, **kwargs)
+    return VQ_f4_d3_e8192(z_channels=16, e_dim=16, **kwargs)
 
 @register_model(f"discrete.vq.f4_d32_e8192")
 def VQ_f4_d32_e8192(**kwargs):
-    return VQ_f4_d3_e8192(z_channels=32, **kwargs)
+    return VQ_f4_d3_e8192(z_channels=32, e_dim=32, **kwargs)
 
 @register_model(f"discrete.vq.f8_d4_e16384")
 def VQ_f8_d4_e16384(
@@ -150,15 +150,15 @@ def VQ_f8_d4_e16384(
 
 @register_model(f"discrete.vq.f8_d8_e16384")
 def VQ_f8_d8_e16384(**kwargs):
-    return VQ_f8_d4_e16384(z_channels=8, **kwargs)
+    return VQ_f8_d4_e16384(z_channels=8, e_dim=8, **kwargs)
 
 @register_model(f"discrete.vq.f8_d16_e16384")
 def VQ_f8_d16_e16384(**kwargs):
-    return VQ_f8_d4_e16384(z_channels=16, **kwargs)
+    return VQ_f8_d4_e16384(z_channels=16, e_dim=16, **kwargs)
 
 @register_model(f"discrete.vq.f8_d32_e16384")
 def VQ_f8_d32_e16384(**kwargs):
-    return VQ_f8_d4_e16384(z_channels=32, **kwargs)
+    return VQ_f8_d4_e16384(z_channels=32, e_dim=32, **kwargs)
 
 @register_model(f"discrete.vq.f16_d8_e16384")
 def VQ_f16_d8_e16384(
@@ -2060,23 +2060,88 @@ def QINCo_f16_d8_e16384(
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
-@register_model(f"continuous.soft_vq.f4_d3_e8192")
-def SoftVQ_f4_d3_e8192(
+@register_model(f"continuous.soft_vq.f8_d16_e16384")
+def SoftVQ_f8_d16_e16384(
     # --- encoder/decoder config ---
         img_size=256,
         dims=2,
         double_z=False,
-        z_channels=3,
+        z_channels=16,
         in_channels=3,
         out_ch=3,
         ch=128,
-        ch_mult=[1, 2, 4],
+        ch_mult=[1, 2, 2, 4],
         num_res_blocks=2,
-        attn_resolutions=[],
+        attn_resolutions=[32],
         dropout=0.0,
         # --- quantizer config ---
-        n_e=8192,
-        e_dim=3,
+        n_e=16384,
+        e_dim=16,
+        entropy_loss_weight=0.01,
+        entropy_loss_temperature=0.01,
+        entropy_gamma=1.0,
+        tau=0.07,
+        use_norm=True,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = SoftVectorQuantizer(
+        n_e=n_e,
+        e_dim=e_dim,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+        tau=tau,
+        use_norm=use_norm,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+@register_model(f"continuous.soft_vq.f8_d32_e16384")
+def SoftVQ_f8_d32_e16384(**kwargs):
+    return SoftVQ_f8_d16_e16384(z_channels=32, e_dim=32, **kwargs)
+
+@register_model(f"continuous.soft_vq.f8_d16_e16384_dinov2")
+def SoftVQ_f8_d16_e16384_dinov2(
+    # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=16,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[32],
+        dropout=0.0,
+        # --- quantizer config ---
+        n_e=16384,
+        e_dim=16,
         entropy_loss_weight=0.01,
         entropy_loss_temperature=0.01,
         entropy_gamma=1.0,
@@ -2121,6 +2186,77 @@ def SoftVQ_f4_d3_e8192(
     )
     alignment = VFFoundationAlignment(latent_channels=z_channels, foundation_type="dinov2")
     return VQModel(encoder, decoder, quantizer, alignment=alignment, **kwargs)
+
+@register_model(f"continuous.soft_vq.f8_d32_e16384_dinov2")
+def SoftVQ_f8_d32_e16384_dinov2(**kwargs):
+    return SoftVQ_f8_d16_e16384_dinov2(z_channels=32, e_dim=32, **kwargs)
+
+@register_model(f"continuous.soft_vq.f8_d16_e16384_biomedclip")
+def SoftVQ_f8_d16_e16384_biomedclip(
+    # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=16,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[32],
+        dropout=0.0,
+        # --- quantizer config ---
+        n_e=16384,
+        e_dim=16,
+        entropy_loss_weight=0.01,
+        entropy_loss_temperature=0.01,
+        entropy_gamma=1.0,
+        tau=0.07,
+        use_norm=True,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    decoder = Decoder(
+        img_size=img_size,
+        dims=dims,
+        double_z=double_z,
+        z_channels=z_channels,
+        in_channels=in_channels,
+        out_ch=out_ch,
+        ch=ch,
+        ch_mult=ch_mult,
+        num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions,
+        dropout=dropout
+    )
+    quantizer = SoftVectorQuantizer(
+        n_e=n_e,
+        e_dim=e_dim,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+        tau=tau,    
+        use_norm=use_norm,
+    )
+    alignment = VFFoundationAlignment(latent_channels=z_channels, foundation_type="biomedclip")
+    return VQModel(encoder, decoder, quantizer, alignment=alignment, **kwargs)
+
+
+@register_model(f"continuous.soft_vq.f8_d32_e16384_biomedclip")
+def SoftVQ_f8_d32_e16384_biomedclip(**kwargs):
+    return SoftVQ_f8_d16_e16384_biomedclip(z_channels=32, e_dim=32, **kwargs)
 
 @register_model(f"continuous.wqvae.f8_d4_e16384")
 def WQVAE_f8_d4_e16384(
