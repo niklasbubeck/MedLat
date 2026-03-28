@@ -1,11 +1,14 @@
 # BERT architecture for the Masked Bidirectional Encoder Transformer
+import logging
 import torch
 from torch import nn
 
+logger = logging.getLogger(__name__)
+
 
 def param_count(archi, model):
-    print(f"Size of model {archi}: "
-          f"{sum(p.numel() for p in model.parameters() if p.requires_grad) / 10 ** 6:.3f}M")
+    logger.info(f"Size of model {archi}: "
+                f"{sum(p.numel() for p in model.parameters() if p.requires_grad) / 10 ** 6:.3f}M")
 
 
 class FeedForward(nn.Module):
@@ -140,12 +143,12 @@ class MaskGIT_TXT(nn.Module):
 
     def partially_init_from_pretrained(self, ckpt):
         pretrained_model = ckpt['model_state_dict']
-        print("Copy only transformer weights from pretrained model")
+        logger.info("Copy only transformer weights from pretrained model")
         for source_parameter, target_parameter in zip(pretrained_model.keys(), self.state_dict().keys()):
             if source_parameter == target_parameter and \
                     self.state_dict()[target_parameter].size() == pretrained_model[source_parameter].size()\
                     and "transformer" in source_parameter:
-                print("copying:", source_parameter, self.state_dict()[target_parameter].size())
+                logger.debug("copying: %s %s", source_parameter, self.state_dict()[target_parameter].size())
                 self.state_dict()[target_parameter].data.copy_(pretrained_model[source_parameter])
 
     def forward(self, x, y, drop_label=None):

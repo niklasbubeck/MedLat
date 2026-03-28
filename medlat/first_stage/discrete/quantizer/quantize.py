@@ -1,3 +1,4 @@
+import logging
 import torch
 import torch.nn as nn
 import math
@@ -5,6 +6,8 @@ import torch.nn.functional as F
 import numpy as np
 from torch import einsum
 from einops import rearrange, reduce
+
+logger = logging.getLogger(__name__)
 from functools import partial
 from itertools import zip_longest
 from typing import Any, List, Union, Optional, Tuple, Sequence, Text, Mapping, Dict
@@ -1620,14 +1623,14 @@ class LookupFreeQuantizer(torch.nn.Module):
         """
 
         indices = indices.long()
-        print(f"indices: {indices.shape}")
+        logger.debug(f"indices (before reshape): {indices.shape}")
         if shape is not None:
             indices = indices.reshape(-1, shape[-3], shape[-2])
-        print(f"indices: {indices.shape}")
+        logger.debug(f"indices (after reshape): {indices.shape}")
         bits = ((indices[..., None] & self.bits_to_indices) != 0).float()
         tokens = bits * 2.0 - 1.0  # (..., token_bits)
 
-        print(f"tokens: {tokens.shape}")
+        logger.debug(f"tokens: {tokens.shape}")
         return tokens
 
     def convert_bits_to_indices(self, tokens: torch.Tensor) -> torch.Tensor:

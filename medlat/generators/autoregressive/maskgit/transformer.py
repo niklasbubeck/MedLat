@@ -1,8 +1,11 @@
+import logging
 from functools import partial
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+logger = logging.getLogger(__name__)
 
 from timm.models.vision_transformer import DropPath, Mlp
 
@@ -283,7 +286,7 @@ class MaskGIT(nn.Module):
             if token_drop_mask.sum() == bsz*num_dropped_tokens and token_all_mask.sum() == bsz*num_masked_tokens:
                 break
             else:
-                print("Rerandom the noise!")
+                logger.debug("Rerandom the noise!")
         token_indices[token_all_mask.nonzero(as_tuple=True)] = self.mask_token_label
 
         # Determine class token labels
@@ -336,7 +339,7 @@ class MaskGIT(nn.Module):
 
             # Add dataset embedding
             input_embeddings[:, 0] = dataset_embedding
-        print(f"input_embeddings.shape: {input_embeddings.shape}")
+        logger.debug(f"input_embeddings.shape: {input_embeddings.shape}")
         # No dropping needed because we use BEiT style architecture
         # dropping
         # token_keep_mask = 1 - token_drop_mask

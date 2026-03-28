@@ -1,7 +1,10 @@
 # Adopted from LDM's KL-VAE: https://github.com/CompVis/latent-diffusion
+import logging
 import torch
 import torch.nn as nn
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def get_conv_layer(dims):
@@ -398,11 +401,9 @@ class Decoder(nn.Module):
         else:  # dims == 3
             self.z_shape = (1, z_channels, curr_res[0], curr_res[1], curr_res[2])
             
-        print(
-            "Working with z of shape {} = {} dimensions.".format(
-                self.z_shape, np.prod(self.z_shape)
-            )
-        )
+        logger.info("Working with z of shape {} = {} dimensions.".format(
+            self.z_shape, np.prod(self.z_shape)
+        ))
 
         # z to block_in
         self.conv_in = conv_layer(

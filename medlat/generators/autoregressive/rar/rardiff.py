@@ -1,6 +1,8 @@
 import logging
 from functools import partial
 
+logger = logging.getLogger(__name__)
+
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
@@ -253,7 +255,7 @@ class RAR(nn.Module):
         return self.diffloss(z=z, target=target)
 
     def forward(self, x, labels):
-        print("forward", x.shape)
+        logger.debug("forward x.shape=%s", x.shape)
         """forward pass for training."""
         # get token ordering
         if self.order == "raster":
@@ -274,7 +276,7 @@ class RAR(nn.Module):
 
         # prepare input tokens
         x = self.patch_embed(x) if not self.force_one_d_seq else x
-        print("patchify", x.shape)
+        logger.debug("patchify x.shape=%s", x.shape)
         x = self.shuffle(x, orders)
         gt_latents = x.clone().detach()
         # forward pass and loss computation

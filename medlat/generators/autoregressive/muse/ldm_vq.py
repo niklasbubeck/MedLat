@@ -1,7 +1,10 @@
 # Adopted from LDM's KL-VAE: https://github.com/CompVis/latent-diffusion
+import logging
 from einops import rearrange
 import torch
 import torch.nn as nn
+
+logger = logging.getLogger(__name__)
 from contextlib import contextmanager
 import numpy as np
 import torch.nn.functional as F
@@ -306,11 +309,9 @@ class Decoder(nn.Module):
         block_in = ch * ch_mult[self.num_resolutions - 1]
         curr_res = resolution // 2 ** (self.num_resolutions - 1)
         self.z_shape = (1, z_channels, curr_res, curr_res)
-        print(
-            "Working with z of shape {} = {} dimensions.".format(
-                self.z_shape, np.prod(self.z_shape)
-            )
-        )
+        logger.info("Working with z of shape {} = {} dimensions.".format(
+            self.z_shape, np.prod(self.z_shape)
+        ))
 
         # z to block_in
         self.conv_in = torch.nn.Conv2d(
@@ -430,8 +431,8 @@ class VectorQuantizer(nn.Module):
             if self.unknown_index == "extra":
                 self.unknown_index = self.re_embed
                 self.re_embed = self.re_embed+1
-            print(f"Remapping {self.n_e} indices to {self.re_embed} indices. "
-                  f"Using {self.unknown_index} for unknown indices.")
+            logger.info(f"Remapping {self.n_e} indices to {self.re_embed} indices. "
+                        f"Using {self.unknown_index} for unknown indices.")
         else:
             self.re_embed = n_e
 
@@ -566,12 +567,12 @@ class VQModel(nn.Module):
             self.monitor = monitor
         self.batch_resize_range = batch_resize_range
         if self.batch_resize_range is not None:
-            print(f"{self.__class__.__name__}: Using per-batch resizing in range {batch_resize_range}.")
+            logger.info(f"{self.__class__.__name__}: Using per-batch resizing in range {batch_resize_range}.")
 
         self.use_ema = use_ema
         if self.use_ema:
             self.model_ema = LitEma(self)
-            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+            logger.info(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
 
         self.scheduler_config = scheduler_config
@@ -586,14 +587,14 @@ class VQModel(nn.Module):
             self.model_ema.store(self.parameters())
             self.model_ema.copy_to(self)
             if context is not None:
-                print(f"{context}: Switched to EMA weights")
+                logger.info(f"{context}: Switched to EMA weights")
         try:
             yield None
         finally:
             if self.use_ema:
                 self.model_ema.restore(self.parameters())
                 if context is not None:
-                    print(f"{context}: Restored training weights")
+                    logger.info(f"{context}: Restored training weights")
 
 
     def on_train_batch_end(self, *args, **kwargs):

@@ -2,10 +2,13 @@
 DCAE (Deep Convolutional Autoencoder) modules following the same pattern as ldm_modules.py
 Adopted from EfficientViT's DCAE implementation
 """
+import logging
 import torch
 import torch.nn as nn
 import numpy as np
 from typing import Optional, Union, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 # Import DCAE building blocks
 try:
@@ -388,11 +391,9 @@ class DCAEDecoder(nn.Module):
         else:  # dims == 3
             self.z_shape = (1, z_channels, curr_res, curr_res, curr_res)
         
-        print(
-            "Working with z of shape {} = {} dimensions.".format(
-                self.z_shape, np.prod(self.z_shape)
-            )
-        )
+        logger.info("Working with z of shape {} = {} dimensions.".format(
+            self.z_shape, np.prod(self.z_shape)
+        ))
 
         # Project in
         project_in_block = ConvLayer(

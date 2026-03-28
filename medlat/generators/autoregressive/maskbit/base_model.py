@@ -5,8 +5,11 @@ We thank the following public implementations for inspiring this code:
 """
 
 import copy
+import logging
 import os
 from typing import Union, Callable, Tuple, Dict, Optional, List
+
+logger = logging.getLogger(__name__)
 
 import torch
 
@@ -63,7 +66,7 @@ class BaseModel(torch.nn.Module):
                 state dictionary will be saved.
         """
         if os.path.isfile(save_directory):
-            print(f"Provided path ({save_directory}) should be a directory, not a file")
+            logger.warning(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
         if save_function is None:
@@ -82,7 +85,7 @@ class BaseModel(torch.nn.Module):
         # Save the model
         save_function(state_dict, os.path.join(save_directory, weights_name))
 
-        print(f"Model weights saved in {os.path.join(save_directory, weights_name)}")
+        logger.info(f"Model weights saved in {os.path.join(save_directory, weights_name)}")
 
     def load_pretrained(
         self,

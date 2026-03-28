@@ -56,21 +56,18 @@ def init_from_ckpt(self, path):
             msg = self.load_state_dict(new_sd, strict=True)
         except RuntimeError as e:
             # If error is due to dimension mismatch (2D vs 3D), print warning and skip loading affected layers
-            print(f"Warning: {str(e)}")
-            print("This might be due to loading 2D weights into 3D model or vice versa.")
-            print("Loading weights with strict=False to skip incompatible layers.")
+            logger.warning(f"Strict load failed: {str(e)}")
+            logger.warning("This might be due to loading 2D weights into 3D model or vice versa.")
+            logger.warning("Loading weights with strict=False to skip incompatible layers.")
             msg = self.load_state_dict(new_sd, strict=False)
 
         # Clean up memory
         torch.cuda.empty_cache()
 
-        # Print loading information
-        print(f"Loading pre-trained {self.__class__.__name__}")
-        print("Missing keys:")
-        print(msg.missing_keys)
-        print("Unexpected keys:")
-        print(msg.unexpected_keys)
-        print(f"Restored from {path}")
+        logger.info(f"Loading pre-trained {self.__class__.__name__}")
+        logger.debug("Missing keys: %s", msg.missing_keys)
+        logger.debug("Unexpected keys: %s", msg.unexpected_keys)
+        logger.info(f"Restored from {path}")
 
 class MaisiGroupNorm3D(nn.GroupNorm):
     """

@@ -155,7 +155,7 @@ code_url="https://github.com/monai/monai/blob/main/monai/networks/nets/maisi_aut
 paper_url="https://arxiv.org/pdf/2507.05622",)
 def Maisi_f4_d4(
     z_channels: int = 4,
-    spatial_dims: int = 3,
+    dims: int = 3,
     in_channels: int = 1,
     out_ch: int = 1,
     num_res_blocks: list[int] = [2, 2, 2],
@@ -178,7 +178,7 @@ def Maisi_f4_d4(
     **kwargs):
 
     encoder = MaisiEncoder(
-            spatial_dims=spatial_dims,
+            spatial_dims=dims,
             in_channels=in_channels,
             num_channels=num_channels,
             out_channels=z_channels,
@@ -199,7 +199,7 @@ def Maisi_f4_d4(
         )
 
     decoder = MaisiDecoder(
-            spatial_dims=spatial_dims,
+            spatial_dims=dims,
             num_channels=num_channels,
             in_channels=z_channels,
             out_channels=out_ch,
@@ -220,7 +220,7 @@ def Maisi_f4_d4(
             save_mem=save_mem,
         )
 
-    return AutoencoderKL(encoder=encoder, decoder=decoder, **kwargs)
+    return AutoencoderKL(encoder=encoder, decoder=decoder, kl_weight=1e-7, **kwargs)
 
 @register_model(f"continuous.medvae.f8_d16")
 def MedVAE_f8_d16(

@@ -169,10 +169,8 @@ class GPT(nn.Module):
             x = torch.cat((cond, x), dim=1)
 
         if debug:
-            print(f"\nSampling Configuration:")
-            print(f"Temperature: {temperature}, Top-k: {top_k}")
-            print(f"Initial sequence shape: {x.shape}")
-            print(f"Steps to generate: {steps}")
+            logger.debug(f"Sampling Configuration: temperature={temperature}, top_k={top_k}, "
+                         f"initial_shape={x.shape}, steps={steps}")
 
         # Generate tokens
         for step in range(steps):
@@ -184,9 +182,8 @@ class GPT(nn.Module):
             logits = logits[:, -1, :] / temperature
 
             if debug and step == 0:
-                print(f"\nStep {step} logits stats:")
-                print(f"Range: [{logits.min().item():.2f}, {logits.max().item():.2f}]")
-                print(f"Mean: {logits.mean().item():.2f}, Std: {logits.std().item():.2f}")
+                logger.debug(f"Step {step} logits — range: [{logits.min().item():.2f}, {logits.max().item():.2f}], "
+                             f"mean: {logits.mean().item():.2f}, std: {logits.std().item():.2f}")
 
             # Apply top-k filtering
             if top_k is not None:
@@ -198,9 +195,8 @@ class GPT(nn.Module):
 
             if debug and step == 0:
                 top_probs, top_tokens = torch.topk(probs[0], k=5)
-                print("\nTop 5 token probabilities (first sequence):")
-                for p, t in zip(top_probs, top_tokens):
-                    print(f"Token {t.item()}: {p.item():.4f}")
+                logger.debug("Top 5 token probabilities: %s",
+                             {t.item(): round(p.item(), 4) for p, t in zip(top_probs, top_tokens)})
 
             # Sample from the distribution
             if sample:

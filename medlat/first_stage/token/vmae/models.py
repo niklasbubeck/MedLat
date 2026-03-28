@@ -9,11 +9,14 @@
 # DeiT: https://github.com/facebookresearch/deit
 # --------------------------------------------------------
 
+import logging
 from functools import partial
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+logger = logging.getLogger(__name__)
 
 from timm.models.vision_transformer import PatchEmbed, Mlp, DropPath
 from typing import Dict, Optional, Tuple, Union
@@ -249,10 +252,10 @@ class conv_decoder_pred(nn.Module):
         self.p = patch_size
         self.pred_with_conv = pred_with_conv
         if self.pred_with_conv:
-            print('pred only with conv instead of previous linear')
+            logger.info('pred only with conv instead of previous linear')
             self.conv_smoother = nn.Conv2d(decoder_embed_dim, patch_size**2 * in_chans, 2, stride=1, padding=0)
         else:
-            print('conv on rgb')
+            logger.info('conv on rgb')
             self.linear_pred = nn.Linear(decoder_embed_dim, patch_size**2 * in_chans, bias=True)
             self.conv_smoother = nn.Conv2d(in_chans, in_chans, 3, 1, 1)
             
@@ -308,13 +311,13 @@ class MaskedAutoencoderViT(nn.Module):
         if self.kl_loss_weight is not None: 
             assert no_cls, 'There should be no class token to use KL loss.'
             encoder_latent_dim = 2 * latent_dim
-            print(f'Use KL loss, encoder latent dim is {encoder_latent_dim} to predict mean & logvar')
+            logger.info(f'Use KL loss, encoder latent dim is {encoder_latent_dim} to predict mean & logvar')
         if self.gradual_resol:
             patch_size = patch_size // 2
-            print(f'patch size: {patch_size}')
+            logger.debug(f'patch size: {patch_size}')
         
         if down_nonlinear:
-            print('Use MLP for latent embedding')
+            logger.info('Use MLP for latent embedding')
             self.to_latent = MLP_dim_resize(embed_dim, latent_dim*4, encoder_latent_dim)
             self.from_latent = MLP_dim_resize(decoder_latent_dim, latent_dim*4, embed_dim)
         else:
@@ -357,7 +360,7 @@ class MaskedAutoencoderViT(nn.Module):
             for i in range(depth):
                 blocks.append(Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer))
                 if i == downsize_time-1:
-                    print(f"Add downsizing block in {i}th layer in encoder.")
+                    logger.info(f"Add downsizing block in {i}th layer in encoder.")
                     blocks.append(Downsample(embed_dim, embed_dim))
             self.blocks = nn.ModuleList(blocks)
         else:
@@ -388,7 +391,7 @@ class MaskedAutoencoderViT(nn.Module):
             for i in range(decoder_depth):
                 decoder_blocks.append(Block(decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer))
                 if i == upsize_time-1:
-                    print(f"Add upsizing block in {i}th layer in decoder.")
+                    logger.info(f"Add upsizing block in {i}th layer in decoder.")
                     decoder_blocks.append(Upsample(decoder_embed_dim, decoder_embed_dim))
             self.decoder_blocks = nn.ModuleList(decoder_blocks)
         else:
@@ -399,7 +402,7 @@ class MaskedAutoencoderViT(nn.Module):
         self.decoder_norm = norm_layer(decoder_embed_dim)
         if smooth_output:
             assert no_cls, 'Should be no CLS token for smooth_output.'
-            print('Use conv in decoder pred.')
+            logger.info('Use conv in decoder pred.')
             self.decoder_pred = conv_decoder_pred(decoder_embed_dim, patch_size, in_chans, pred_with_conv)
         else:
             self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size**2 * in_chans, bias=True) # decoder to patch
@@ -651,7 +654,7 @@ class MaskedAutoencoderViT(nn.Module):
             latent = latent.permute(0,2,1) # B D HW
             posterior = DiagonalGaussianDistribution(latent) # B D HW
             if use_mode:
-                print('mode')
+                logger.debug('using posterior mode')
                 latent = posterior.mode() # B D HW
             else:
                 latent = posterior.sample() # B D HW

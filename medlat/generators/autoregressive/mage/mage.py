@@ -1,8 +1,11 @@
+import logging
 from functools import partial
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+logger = logging.getLogger(__name__)
 
 from timm.models.vision_transformer import DropPath, Mlp
 from medlat.modules.in_and_out import PatchEmbed
@@ -286,7 +289,7 @@ class MaskedGenerativeEncoderViT(nn.Module):
             if token_drop_mask.sum() == bsz*num_dropped_tokens and token_all_mask.sum() == bsz*num_masked_tokens:
                 break
             else:
-                print("Rerandom the noise!")
+                logger.debug("Rerandom the noise!")
         token_indices[token_all_mask.nonzero(as_tuple=True)] = self.mask_token_label
 
         # concate class token

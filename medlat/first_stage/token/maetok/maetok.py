@@ -1,8 +1,11 @@
-import torch 
-import torch.nn as nn 
+import logging
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from .modules import MAETokViTEncoder, MAETokViTDecoder
+
+logger = logging.getLogger(__name__)
 from medlat.modules.alignments import HOGAlignment, DinoAlignment, ClipAlignment
 from medlat.registry import register_model
 from medlat.utils import init_from_ckpt
@@ -153,7 +156,7 @@ class MaskAEModel(nn.Module):
         # Initialize alignment modules
         self.aux_hog_decoder = None
         if self.aux_hog_dec:
-            print('Using HOG decoder')
+            logger.info('Using HOG decoder')
             use_movq_hog = 'movq' in self.aux_dec_model if self.aux_dec_model else False
             # Create decoder for HOG alignment
             aux_hog_decoder_model = MAETokViTDecoder(
@@ -184,7 +187,7 @@ class MaskAEModel(nn.Module):
         
         self.aux_dino_decoder = None
         if self.aux_dino_dec:
-            print('Using DINO decoder')
+            logger.info('Using DINO decoder')
             use_movq_dino = 'movq' in self.aux_dec_model if self.aux_dec_model else False
             # Create decoder for DINO alignment
             aux_dino_decoder_model = MAETokViTDecoder(
@@ -218,7 +221,7 @@ class MaskAEModel(nn.Module):
         
         self.aux_clip_decoder = None
         if self.aux_clip_dec:
-            print('Using CLIP decoder')
+            logger.info('Using CLIP decoder')
             use_movq_clip = 'movq' in self.aux_dec_model if self.aux_dec_model else False
             # Create decoder for CLIP alignment
             aux_clip_decoder_model = MAETokViTDecoder(

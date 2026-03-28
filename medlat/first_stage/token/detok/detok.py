@@ -313,7 +313,7 @@ class Decoder(nn.Module):
         elif dims == 3 and use_rope:
             head_dim = self.transformer[0].attn.head_dim
             rope_tensor = get_rope_tensor_3d(head_dim, self.grid_size[0], self.grid_size[1], self.grid_size[2]).unsqueeze(0)
-            print(rope_tensor.shape)
+            logger.debug("rope_tensor.shape: %s", rope_tensor.shape)
             self.register_buffer("rope_tensor", rope_tensor, persistent=False)
         else:
             self.register_buffer("rope_tensor", None, persistent=False)

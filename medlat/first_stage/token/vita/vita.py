@@ -1,6 +1,9 @@
-import torch 
+import logging
+import torch
 import torch.nn as nn
 from typing import Tuple
+
+logger = logging.getLogger(__name__)
 from .modules import ImagingMaskedEncoder, ImagingMaskedDecoder, ReconstructionCriterion
 from .utils.imaging_model_related import Masker, sincos_pos_embed, patchify, unpatchify
 from medlat.utils import init_from_ckpt
@@ -40,7 +43,7 @@ class ReconMAE(nn.Module):
         # self.data_view = self.hparams.val_dset.view
         # use_both_axes = True if self.hparams.val_dset.get_view() == 2 else False # For positional embedding
         # img_shape = self.hparams.val_dset[0][0].shape
-        print(f"img_shape: {img_shape}, use_both_axes: {use_both_axes}, mask_ratio: {mask_ratio}")
+        logger.debug(f"img_shape: {img_shape}, use_both_axes: {use_both_axes}, mask_ratio: {mask_ratio}")
         self.patch_size = patch_size
         self.img_shape = img_shape
 

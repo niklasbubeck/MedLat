@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 from copy import deepcopy
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -43,7 +46,7 @@ class BaseConfig:
                 if strict:
                     raise ValueError(f"loading extra '{k}'")
                 else:
-                    print(f"loading extra '{k}'")
+                    logger.debug(f"loading extra '{k}'")
                     continue
             if isinstance(self.__dict__[k], BaseConfig):
                 self.__dict__[k].from_dict(v)

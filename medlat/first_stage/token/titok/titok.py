@@ -20,11 +20,14 @@ taken from http://github.com/bytedance/1d-tokenizer/blob/main/modeling/titok.py
 
 """
 
+import logging
 import torch
 import torch.nn as nn
 from einops import rearrange
 import torch.nn.functional as F
 from medlat.first_stage.token.titok.modules import TiTokEncoder, TiTokDecoder, Pixel_Encoder, Pixel_Decoder, Pixel_Quantizer
+
+logger = logging.getLogger(__name__)
 from medlat.first_stage.modules.gaussian_dist import DiagonalGaussianDistribution
 import json
 from omegaconf import OmegaConf
@@ -56,7 +59,7 @@ class PretrainedTokenizer(nn.Module):
             num_embeddings=1024, embedding_dim=256, commitment_cost=0.25)
         # Load pretrained weights
         self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu"), weights_only=False), strict=True)
-        print("Loaded pretrained weights")
+        logger.info("Loaded pretrained weights")
         
         self.eval()
         for param in self.parameters():
@@ -135,7 +138,7 @@ class TiTok(nn.Module):
 
         self.n_embed = codebook_size
         self.embed_dim = token_size
-        print(f"num latent tokens: {num_latent_tokens}")
+        logger.debug(f"num latent tokens: {num_latent_tokens}")
         self.quantize_mode = quantize_mode
         self.quantizer_loss_weight = quantizer_loss_weight
         if self.quantize_mode not in ["vq", "vae"]:
@@ -292,7 +295,7 @@ class TiTok(nn.Module):
         _, _, (_, _, idx) = self.pixel_vqgan.encode(x)
         idx = idx.reshape(decoded.shape[0], -1) # B x N
         decoded = decoded.reshape(decoded.shape[0], decoded.shape[1], -1)
-        print(idx.shape, decoded.shape)
+        logger.debug("idx.shape=%s decoded.shape=%s", idx.shape, decoded.shape)
         ce_loss = F.cross_entropy(decoded, idx, reduction='mean')
         total_loss = ce_loss + q_loss * self.quantizer_loss_weight
         return total_loss.float()

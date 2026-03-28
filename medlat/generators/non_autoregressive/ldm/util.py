@@ -8,6 +8,7 @@
 # thanks!
 
 
+import logging
 import os
 import math
 import torch
@@ -16,6 +17,8 @@ import numpy as np
 from einops import repeat
 
 from medlat.utils import instantiate_from_config
+
+logger = logging.getLogger(__name__)
 
 
 def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
@@ -56,7 +59,7 @@ def make_ddim_timesteps(ddim_discr_method, num_ddim_timesteps, num_ddpm_timestep
     # add one to get the final alpha values right (the ones from first scale to data during sampling)
     steps_out = ddim_timesteps + 1
     if verbose:
-        print(f'Selected timesteps for ddim sampler: {steps_out}')
+        logger.debug(f'Selected timesteps for ddim sampler: {steps_out}')
     return steps_out
 
 
@@ -68,9 +71,9 @@ def make_ddim_sampling_parameters(alphacums, ddim_timesteps, eta, verbose=True):
     # according the the formula provided in https://arxiv.org/abs/2010.02502
     sigmas = eta * np.sqrt((1 - alphas_prev) / (1 - alphas) * (1 - alphas / alphas_prev))
     if verbose:
-        print(f'Selected alphas for ddim sampler: a_t: {alphas}; a_(t-1): {alphas_prev}')
-        print(f'For the chosen value of eta, which is {eta}, '
-              f'this results in the following sigma_t schedule for ddim sampler {sigmas}')
+        logger.debug(f'Selected alphas for ddim sampler: a_t: {alphas}; a_(t-1): {alphas_prev}')
+        logger.debug(f'For the chosen value of eta, which is {eta}, '
+                     f'this results in the following sigma_t schedule for ddim sampler {sigmas}')
     return sigmas, alphas, alphas_prev
 
 

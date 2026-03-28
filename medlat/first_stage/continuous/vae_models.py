@@ -1,7 +1,10 @@
+import logging
 import torch
 import torch.nn as nn
 import numpy as np
 from medlat.utils import init_from_ckpt
+
+logger = logging.getLogger(__name__)
 from medlat.modules.alignments import AlignmentModule
 from medlat.first_stage.continuous.modules.ldm_modules import get_conv_layer
 from medlat.first_stage.modules.gaussian_dist import DiagonalGaussianDistribution, _DeterministicPosterior
@@ -204,7 +207,7 @@ class AutoencoderKLTransformer(nn.Module):
         else:
             z = posterior.mode()
 
-        print(f"z: {z.shape}")
+        logger.debug(f"z: {z.shape}")
         dec = self.decode(z, aux=aux)
         
         if self.alignment is not None:

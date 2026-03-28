@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional, Tuple, Literal
 
 import torch
 from scipy import stats as scipy_stats
 import torch.nn as nn
 import torch.nn.functional as F
+
+logger = logging.getLogger(__name__)
 from torch import Tensor
 from einops import rearrange
 
@@ -391,7 +394,7 @@ class GenericViTEncoder(nn.Module):
         num_visible_tokens = None
         if self.masking == "mae_random":
             mask_ratio = self.mask_ratio_generator.rvs(1)[0] if mask_ratio is None else mask_ratio
-            print(f"mask_ratio: {mask_ratio}")
+            logger.debug(f"mask_ratio: {mask_ratio}")
             seq, mask, ids_restore, ids_keep = self._mae_random_mask(seq, mask_ratio=mask_ratio)
             # After masking, seq contains only visible tokens
             # Calculate number of visible image tokens

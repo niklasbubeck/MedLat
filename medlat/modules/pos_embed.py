@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Sequence, Tuple, Optional
 import numpy as np
 import torch
 import torch.nn as nn
+
+logger = logging.getLogger(__name__)
 
 
 def to_ntuple(value: int | Sequence[int], dims: int) -> Tuple[int, ...]:
@@ -213,7 +216,7 @@ def interpolate_pos_embed(model: nn.Module, checkpoint_model: dict) -> None:
         orig_size = int((pos_embed_checkpoint.shape[-2] - num_extra_tokens) ** 0.5)
         new_size = int(num_patches ** 0.5)
         if orig_size != new_size:
-            print(f"Position interpolate from {orig_size}x{orig_size} to {new_size}x{new_size}")
+            logger.info(f"Position interpolate from {orig_size}x{orig_size} to {new_size}x{new_size}")
             extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
             pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
             pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)

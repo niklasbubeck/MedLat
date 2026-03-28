@@ -1,7 +1,10 @@
+import logging
 import torch
 import torch.nn as nn
 from typing import Dict, Any, Optional
 from medlat.utils import init_from_ckpt, get_model_type
+
+logger = logging.getLogger(__name__)
 
 
 class GenWrapper(nn.Module):
@@ -18,7 +21,7 @@ class GenWrapper(nn.Module):
         self.generator_type = get_model_type(generator)
         self.first_stage = first_stage
         self.first_stage_type = get_model_type(first_stage)
-        print(f"generator_type: {self.generator_type}, first_stage_type: {self.first_stage_type}")
+        logger.info(f"generator_type: {self.generator_type}, first_stage_type: {self.first_stage_type}")
         self.scale_steps = scale_steps
 
         if self.first_stage_type == "discrete" and self.generator_type == "non-autoregressive":
@@ -95,7 +98,7 @@ class GenWrapper(nn.Module):
             return
         
         if self._scale_step_counter == self.scale_steps:
-            print(f"Scale factor fixed at {self.scale_factor.item()}")
+            logger.info(f"Scale factor fixed at {self.scale_factor.item()}")
             self._scale_step_counter +=1
             return
         

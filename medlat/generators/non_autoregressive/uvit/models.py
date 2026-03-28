@@ -1,3 +1,4 @@
+import logging
 import torch
 import torch.nn as nn
 import math
@@ -17,7 +18,7 @@ else:
         ATTENTION_MODE = 'xformers'
     except:
         ATTENTION_MODE = 'math'
-print(f'attention mode is {ATTENTION_MODE}')
+logging.getLogger(__name__).debug(f'attention mode is {ATTENTION_MODE}')
 
 
 __all__ = ['UViT', 'U_ViT_Small', 'U_ViT_Small_Deep', 'U_ViT_Mid', 'U_ViT_Large', 'U_ViT_Huge']

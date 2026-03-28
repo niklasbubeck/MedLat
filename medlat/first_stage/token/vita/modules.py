@@ -1,9 +1,12 @@
+import logging
 import torch
 from torch import nn
 from typing import List, Sequence, Tuple, Union
 from torch.utils.checkpoint import checkpoint
 from timm.models.vision_transformer import Block
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # from networks.unetr_blocks import UnetOutBlock, UnetrBasicBlock, UnetrPrUpBlock, UnetrUpBlock
 
@@ -25,7 +28,7 @@ class PatchEmbed(nn.Module):
         
         assert len(patch_size) == 3, "Patch size should be 3D"
         assert in_channels == 1, "Only supporting input channel size as 1"
-        print(f"im_shape: {im_shape}, patch_size: {patch_size}")
+        logger.debug(f"im_shape: {im_shape}, patch_size: {patch_size}")
         self.im_shape = im_shape
         if len(im_shape) == 3:
             self.im_shape = im_shape.unsqueeze(1) # (S, H, W) -> (S, 1, H, W)
@@ -40,7 +43,7 @@ class PatchEmbed(nn.Module):
                           im_shape[2] // patch_size[1], 
                           im_shape[3] // patch_size[2]) # (S, t, h, w)
         self.num_patches = np.prod(self.grid_size)
-        print(f"grid_size: {self.grid_size}, num_patches: {self.num_patches}")
+        logger.debug(f"grid_size: {self.grid_size}, num_patches: {self.num_patches}")
     
     def forward(self, x):
         """ 
@@ -101,7 +104,7 @@ class ImagingMaskedEncoder(nn.Module):
                                     in_channels=patch_in_channels, 
                                     patch_size=patch_size, 
                                     out_channels=enc_embed_dim, )
-        print(f"patch_embed.num_patches: {self.patch_embed.num_patches}")
+        logger.debug(f"patch_embed.num_patches: {self.patch_embed.num_patches}")
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.patch_embed.out_channels))
         self.enc_pos_embed = nn.Parameter(torch.zeros(1, 1 + self.patch_embed.num_patches, self.patch_embed.out_channels), 
                                       requires_grad=False)
@@ -157,9 +160,9 @@ class ImagingMaskedEncoder(nn.Module):
             ids_restore: [B, 1 + length * mask_ratio] torch.Tensor
         """
         # Embed patches: (B, S, T, H, W) -> (B, S * T * num_patches, embed_dim)
-        print(f"x.shape: {x.shape}")
+        logger.debug(f"x.shape (before patch_embed): {x.shape}")
         x = self.patch_embed(x)
-        print(f"x.shape: {x.shape}")
+        logger.debug(f"x.shape (after patch_embed): {x.shape}")
         
         # Add positional embedding: (B, S * T * num_patches, embed_dim)
         if self.use_enc_pe:
@@ -458,7 +461,7 @@ class ImagingMaskedDecoder(nn.Module):
         self.decoder_num_patches = decoder_num_patches
         self.use_enc_pe = use_enc_pe
 
-        print(f"grid_size: {grid_size}, head_out_dim: {head_out_dim}, decoder_num_patches: {decoder_num_patches}, use_enc_pe: {use_enc_pe}, enc_embed_dim: {enc_embed_dim}, dec_embed_dim: {dec_embed_dim}, dec_num_heads: {dec_num_heads}, dec_depth: {dec_depth}, mlp_ratio: {mlp_ratio}, use_both_axes: {use_both_axes}")
+        logger.debug(f"grid_size: {grid_size}, head_out_dim: {head_out_dim}, decoder_num_patches: {decoder_num_patches}, use_enc_pe: {use_enc_pe}, enc_embed_dim: {enc_embed_dim}, dec_embed_dim: {dec_embed_dim}, dec_num_heads: {dec_num_heads}, dec_depth: {dec_depth}, mlp_ratio: {mlp_ratio}, use_both_axes: {use_both_axes}")
         self.decoder_embed = nn.Linear(enc_embed_dim, dec_embed_dim)
         self.dec_pos_embed = nn.Parameter(
             torch.zeros(1, 1 + self.decoder_num_patches, dec_embed_dim), requires_grad=False)

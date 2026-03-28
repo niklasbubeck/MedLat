@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import importlib
+import logging
 from typing import Any, Mapping, Literal
 
 import torch
 import torch.nn as nn
+
+logger = logging.getLogger(__name__)
 
 
 def get_model_type(model: nn.Module) -> Literal["continuous", "discrete", "token", "autoregressive", "non-autoregressive"]:
@@ -128,18 +131,16 @@ def init_from_ckpt(model, path: str, weights_only: bool = False) -> None:
     try:
         msg = model.load_state_dict(cleaned, strict=True)
     except RuntimeError as err:
-        print(f"Warning: {err}")
-        print("Falling back to non-strict loading (often happens when mixing 2D/3D weights).")
+        logger.warning(f"Strict load failed: {err}")
+        logger.warning("Falling back to non-strict loading (often happens when mixing 2D/3D weights).")
         msg = model.load_state_dict(cleaned, strict=False)
 
     torch.cuda.empty_cache()
 
-    print(f"Loading pre-trained {model.__class__.__name__}")
-    print("Missing keys:")
-    print(msg.missing_keys)
-    print("Unexpected keys:")
-    print(msg.unexpected_keys)
-    print(f"Restored from {path}")
+    logger.info(f"Loading pre-trained {model.__class__.__name__}")
+    logger.debug("Missing keys: %s", msg.missing_keys)
+    logger.debug("Unexpected keys: %s", msg.unexpected_keys)
+    logger.info(f"Restored from {path}")
 
 
 def instantiate_from_config(config: Mapping[str, Any]) -> Any:
