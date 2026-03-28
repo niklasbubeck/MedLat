@@ -143,6 +143,73 @@ def init_from_ckpt(model, path: str, weights_only: bool = False) -> None:
     logger.info(f"Restored from {path}")
 
 
+def validate_compatibility(first_stage: nn.Module, generator: nn.Module) -> None:
+    """
+    Validate that a first-stage tokenizer and a generator are compatible for use with GenWrapper.
+
+    Checks:
+    - continuous/discrete + non-autoregressive: tokenizer.embed_dim must match generator.in_channels
+    - continuous + autoregressive: tokenizer.embed_dim must match generator.in_channels
+    - discrete + autoregressive: tokenizer.n_embed must match generator.codebook_size
+    - when both models expose vae_stride: the values must match
+
+    Raises:
+        ValueError: with a descriptive message listing all detected mismatches.
+    """
+    fs_type = get_model_type(first_stage)
+    gen_type = get_model_type(generator)
+
+    errors: list[str] = []
+
+    # ── channel / codebook size checks ──────────────────────────────────────
+    if gen_type == "non-autoregressive":
+        embed_dim = getattr(first_stage, "embed_dim", None)
+        in_channels = getattr(generator, "in_channels", None)
+        if embed_dim is not None and in_channels is not None and embed_dim != in_channels:
+            errors.append(
+                f"tokenizer.embed_dim={embed_dim} != generator.in_channels={in_channels}; "
+                "pass in_channels=tokenizer.embed_dim when building the generator"
+            )
+
+    elif gen_type == "autoregressive" and fs_type == "continuous":
+        embed_dim = getattr(first_stage, "embed_dim", None)
+        in_channels = getattr(generator, "in_channels", None)
+        if embed_dim is not None and in_channels is not None and embed_dim != in_channels:
+            errors.append(
+                f"tokenizer.embed_dim={embed_dim} != generator.in_channels={in_channels}; "
+                "pass in_channels=tokenizer.embed_dim when building the generator"
+            )
+
+    elif gen_type == "autoregressive" and fs_type == "discrete":
+        n_embed = getattr(first_stage, "n_embed", None)
+        codebook_size = getattr(generator, "codebook_size", None)
+        if n_embed is not None and codebook_size is not None and n_embed != codebook_size:
+            errors.append(
+                f"tokenizer.n_embed={n_embed} != generator.codebook_size={codebook_size}; "
+                "pass num_tokens=tokenizer.n_embed when building the generator"
+            )
+
+    # ── vae_stride check (when both sides expose it) ─────────────────────────
+    tok_stride = getattr(first_stage, "vae_stride", None)
+    gen_stride = getattr(generator, "vae_stride", None)
+    if tok_stride is not None and gen_stride is not None:
+        # Normalise tuples to a single representative value for comparison
+        def _scalar(s):
+            return s[0] if isinstance(s, (tuple, list)) else s
+        if _scalar(tok_stride) != _scalar(gen_stride):
+            errors.append(
+                f"tokenizer.vae_stride={tok_stride} != generator.vae_stride={gen_stride}; "
+                "pass vae_stride=tokenizer.vae_stride when building the generator"
+            )
+
+    if errors:
+        raise ValueError(
+            f"Incompatible tokenizer ({type(first_stage).__name__}) and "
+            f"generator ({type(generator).__name__}):\n"
+            + "\n".join(f"  - {e}" for e in errors)
+        )
+
+
 def instantiate_from_config(config: Mapping[str, Any]) -> Any:
     """
     Instantiate an object from a Hydra/OmegaConf-style configuration dict.

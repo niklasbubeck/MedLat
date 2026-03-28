@@ -9,6 +9,7 @@ from .registry import (
     get_model_info,
     register_model,
 )
+from .utils import validate_compatibility
 
 __all__ = [
     "MODEL_REGISTRY",
@@ -18,4 +19,5 @@ __all__ = [
     "get_model_info",
     "register_model",
     "GenWrapper",
+    "validate_compatibility",
 ]
