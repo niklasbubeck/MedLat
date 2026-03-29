@@ -6,6 +6,7 @@ from torch import nn, einsum
 from einops import rearrange, repeat
 
 from .util import checkpoint
+from medlat.modules.nn_utils import zero_module
 
 
 def exists(val):
@@ -62,15 +63,6 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-
-
-def zero_module(module):
-    """
-    Zero out the parameters of a module and return it.
-    """
-    for p in module.parameters():
-        p.detach().zero_()
-    return module
 
 
 def Normalize(in_channels):

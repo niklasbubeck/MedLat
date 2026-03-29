@@ -4,6 +4,7 @@ from torch.utils.checkpoint import checkpoint
 import math
 
 from medlat.diffusion import create_gaussian_diffusion
+from medlat.modules.embeddings import TimestepEmbedder
 
 
 class DiffLoss(nn.Module):
@@ -41,7 +42,7 @@ class DiffLoss(nn.Module):
 
     def sample(self, z, temperature=1.0, cfg=1.0):
         # diffusion loss sampling
-        
+
         if not cfg == 1.0:
             noise = torch.randn(z.shape[0] // 2, self.in_channels).cuda()
             noise = torch.cat([noise, noise], dim=0)
@@ -60,48 +61,9 @@ class DiffLoss(nn.Module):
         return sampled_token_latent
 
 
-def modulate(x, shift, scale):
+def _modulate_flat(x, shift, scale):
+    """Flat modulation for 1D tensors (no unsqueeze). Used by DiffLoss MLP blocks."""
     return x * (1 + scale) + shift
-
-
-class TimestepEmbedder(nn.Module):
-    """
-    Embeds scalar timesteps into vector representations.
-    """
-    def __init__(self, hidden_size, frequency_embedding_size=256):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size, bias=True),
-            nn.SiLU(),
-            nn.Linear(hidden_size, hidden_size, bias=True),
-        )
-        self.frequency_embedding_size = frequency_embedding_size
-
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        """
-        Create sinusoidal timestep embeddings.
-        :param t: a 1-D Tensor of N indices, one per batch element.
-                          These may be fractional.
-        :param dim: the dimension of the output.
-        :param max_period: controls the minimum frequency of the embeddings.
-        :return: an (N, D) Tensor of positional embeddings.
-        """
-        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
-        half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
-        ).to(device=t.device)
-        args = t[:, None].float() * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding
-
-    def forward(self, t):
-        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
-        t_emb = self.mlp(t_freq)
-        return t_emb
 
 
 class ResBlock(nn.Module):
@@ -131,7 +93,7 @@ class ResBlock(nn.Module):
 
     def forward(self, x, y):
         shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(y).chunk(3, dim=-1)
-        h = modulate(self.in_ln(x), shift_mlp, scale_mlp)
+        h = _modulate_flat(self.in_ln(x), shift_mlp, scale_mlp)
         h = self.mlp(h)
         return x + gate_mlp * h
 
@@ -151,7 +113,7 @@ class FinalLayer(nn.Module):
 
     def forward(self, x, c):
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=-1)
-        x = modulate(self.norm_final(x), shift, scale)
+        x = _modulate_flat(self.norm_final(x), shift, scale)
         x = self.linear(x)
         return x
 
