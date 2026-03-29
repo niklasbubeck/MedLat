@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.9", "3.11"]
     steps:
       - uses: actions/checkout@v4
 
@@ -39,3 +39,6 @@ jobs:
 
       - name: Registry integration script (full suite)
         run: python tests/registry_integration.py
+
+      - name: Type check (non-blocking)
+        run: mypy medlat/base.py medlat/utils.py medlat/modules/wrapper.py --ignore-missing-imports || true
