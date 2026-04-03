@@ -3,12 +3,21 @@
 **MedLat** (`medlat`) is a PyTorch library that makes medical and general-purpose image generation research feel less like archaeology and more like engineering. It ships a single **model registry** spanning tokenizers, autoencoders, and generators — hundreds of concrete configurations, one API.
 
 ```python
-from medlat import get_model, available_models, GenWrapper
+from medlat import get_model, suggest_generator_params, GenWrapper
 
-tokenizer = get_model("continuous.aekl.f8_d16", img_size=224)
-generator = get_model("dit.xl_2", img_size=224, vae_stride=8, in_channels=16, num_classes=10)
-wrapper   = GenWrapper(generator, tokenizer)
+tok = get_model("continuous.aekl.f8_d16", img_size=224)
+gen = get_model("dit.xl_2", img_size=224, num_classes=10, **suggest_generator_params(tok))
+wrapper = GenWrapper(gen, tok)
+print(wrapper)
+# GenWrapper(
+#   routing      = continuous + non-autoregressive,
+#   tokenizer    = AEKL,
+#   generator    = DiT,
+#   scale_factor = 0.1822  [auto],
+# )
 ```
+
+**[→ Full API documentation](https://niklasbubeck.github.io/MedLat/api/)**
 
 ---
 
@@ -37,6 +46,62 @@ Images / Volumes
 
 ---
 
+## What's new in v0.1.4
+
+### Zero-friction model wiring
+
+**`suggest_generator_params(tokenizer)`** — inspects any tokenizer and returns the exact kwargs the paired generator needs. No more hunting for `in_channels` or `vae_stride`:
+
+```python
+tok = get_model("continuous.aekl.f8_d16", img_size=256)
+params = suggest_generator_params(tok)
+# → {'vae_stride': 8, 'in_channels': 16}
+gen = get_model("dit.xl_2", img_size=256, num_classes=1000, **params)
+```
+
+Works for discrete tokenizers too — returns `codebook_size` and `num_tokens` automatically.
+
+### Inspect before you build
+
+**`get_model_signature(name)`** uses `inspect.signature` to show every builder parameter and its default value — always in sync with the code, zero documentation lag:
+
+```python
+from medlat import get_model_signature
+
+get_model_signature("dit.xl_2")
+# → {'img_size': '<required>', 'vae_stride': '<required>',
+#    'in_channels': '<required>', 'num_classes': 10, 'learn_sigma': True, …}
+```
+
+### Actionable error messages
+
+`GenWrapper` now validates the tokenizer–generator pair at construction and tells you exactly how to fix a mismatch:
+
+```
+ValueError: Channel mismatch: DiT.in_channels=4 but AEKL.embed_dim=16.
+  → Rebuild the generator with in_channels=16, or pass **suggest_generator_params(tokenizer)
+```
+
+### Unified scheduler discovery
+
+Three scheduler paradigms — Gaussian diffusion, flow matching, and Self-Flow — are now discoverable through the same pattern as models:
+
+```python
+from medlat import available_schedulers, scheduler_info, create_scheduler
+
+available_schedulers()
+# → ('diffusion', 'flow', 'self_flow')
+
+info = scheduler_info("self_flow")
+print(info.description)
+print(info.optional_kwargs)
+
+sched = create_scheduler("flow", path_type="Linear", prediction="velocity")
+sched = create_scheduler("self_flow", masking_strategy="complexity")
+```
+
+---
+
 ## Installation
 
 ```bash
@@ -60,38 +125,43 @@ python tests/registry_integration.py
 ## Quick start
 
 ```python
-from medlat import get_model, available_models, get_model_info, GenWrapper
+from medlat import (get_model, available_models, get_model_info,
+                    get_model_signature, suggest_generator_params,
+                    GenWrapper, create_scheduler, available_schedulers)
 
 # ── Explore the registry ──────────────────────────────────────────────────
-print(list(available_models()))            # all IDs
-print(list(available_models("discrete."))) # filtered
-print(get_model_info("continuous.vavae.f8_d32_dinov2"))  # paper / code links
+available_models()                                    # all 200+ IDs
+available_models("discrete.")                         # filtered by prefix
+get_model_info("continuous.vavae.f8_d32_dinov2")      # paper / code links
+get_model_signature("dit.xl_2")                       # required kwargs + defaults
 
-# ── Continuous tokenizer + diffusion generator (DiT) ─────────────────────
-tokenizer = get_model("continuous.aekl.f8_d16", img_size=224)
-generator = get_model("dit.xl_2",
-    img_size=224, vae_stride=tokenizer.vae_stride,
-    in_channels=tokenizer.embed_dim, num_classes=10)
-wrapper = GenWrapper(generator, tokenizer)
+# ── Continuous tokenizer + DiT — params inferred automatically ───────────
+tok = get_model("continuous.aekl.f8_d16", img_size=224)
+gen = get_model("dit.xl_2", img_size=224, num_classes=10,
+                **suggest_generator_params(tok))       # → vae_stride=8, in_channels=16
+wrapper = GenWrapper(gen, tok)
+print(wrapper)                                         # routing · models · scale_factor
 
 z      = wrapper.vae_encode(images)        # (B, C, H, W) continuous latents
-sample = generator.forward_with_cfg(z, t, y=labels, cfg_scale=1.5)
+sample = gen.forward_with_cfg(z, t, y=labels, cfg_scale=1.5)
 out    = wrapper.vae_decode(sample)
 
-# ── Discrete tokenizer + masked generation (MaskGIT) ─────────────────────
-tokenizer = get_model("discrete.vq.f8_d4_e16384", img_size=224)
-generator = get_model("maskgit.b",
-    img_size=224, vae_stride=tokenizer.vae_stride,
-    num_tokens=tokenizer.n_embed, num_classes=10)
-wrapper = GenWrapper(generator, tokenizer)
+# ── Discrete tokenizer + MaskGIT — params inferred automatically ─────────
+tok = get_model("discrete.vq.f8_d4_e16384", img_size=224)
+gen = get_model("maskgit.b", img_size=224, num_classes=10,
+                **suggest_generator_params(tok))
+wrapper = GenWrapper(gen, tok)
+loss = wrapper(wrapper.vae_encode(images), y=labels)
 
-z    = wrapper.vae_encode(images)          # (B, seq_len) discrete indices
-loss = wrapper(z, y=labels)
+# ── Schedulers ───────────────────────────────────────────────────────────
+available_schedulers()                                 # ('diffusion', 'flow', 'self_flow')
+sched = create_scheduler("flow", path_type="Linear", prediction="velocity")
+sched = create_scheduler("self_flow", masking_strategy="complexity")
 
 # ── Non-square inputs ─────────────────────────────────────────────────────
-tokenizer = get_model("continuous.aekl.f8_d16", img_size=(192, 256))  # H×W
-generator = get_model("mar.b",
-    img_size=(192, 256), vae_stride=8, in_channels=16, class_num=10)
+tok = get_model("continuous.aekl.f8_d16", img_size=(192, 256))
+gen = get_model("mar.b", img_size=(192, 256), class_num=10,
+                **suggest_generator_params(tok))
 ```
 
 ---
@@ -268,7 +338,8 @@ When training on heterogeneous modalities (e.g. knee MRI + brain MRI), aligning 
 
 ```
 medlat/
-├── registry.py                  register_model · get_model · available_models · get_model_info
+├── registry.py                  register_model · get_model · available_models · get_model_info · get_model_signature
+├── utils.py                     init_from_ckpt · validate_compatibility · suggest_generator_params
 ├── first_stage/
 │   ├── continuous/              AEKL · MAISI · MedVAE · VAVAE · DCAE · SoftVQ/WQVAE
 │   ├── discrete/                VQ · RQ · FSQ · LFQ · BSQ · SimVQ · QINCo family · HCVQ · MaskGIT-VQ
@@ -289,7 +360,9 @@ medlat/
 │       ├── uvit/                UViT (U-Net + ViT hybrid diffusion)
 │       ├── ldm/                 LDM  (UNet latent diffusion)
 │       └── adm/                 ADM  (Dhariwal–Nichol UNet + classifiers)
-├── diffusion/                   create_gaussian_diffusion · schedules · sampling
+├── scheduling/                  create_scheduler · available_schedulers · scheduler_info
+│                                DualTimestepScheduler (Self-Flow) · FlowMatchingScheduler · GaussianDiffusionScheduler
+├── diffusion/                   create_gaussian_diffusion · schedules · sampling  (legacy)
 └── modules/
     ├── wrapper.py               GenWrapper  (encode/decode glue for any combination)
     ├── pos_embed.py             to_ntuple · sincos & learned positional embeddings
@@ -427,17 +500,22 @@ Each notebook has:
 ## Discovering models
 
 ```python
-from medlat import available_models, get_model_info
+from medlat import available_models, get_model_info, get_model_signature
 
 # Count everything
-print(len(list(available_models())))       # 200+
+len(list(available_models()))              # 200+
 
 # Subsets by prefix
-continuous  = list(available_models("continuous."))
-discrete    = list(available_models("discrete."))
-generators  = list(available_models("dit.")) + list(available_models("mar."))
+available_models("continuous.")
+available_models("discrete.")
+available_models("dit.") 
 
-# What's behind an ID?
+# Inspect required kwargs before building — zero docs hunting
+get_model_signature("dit.xl_2")
+# → {'img_size': '<required>', 'vae_stride': '<required>',
+#    'in_channels': '<required>', 'num_classes': 10, …}
+
+# Metadata: paper link, code link, description
 info = get_model_info("continuous.vavae.f8_d32_dinov2")
 print(info.description, info.paper_url, info.code_url)
 ```

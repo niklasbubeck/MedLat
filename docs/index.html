@@ -453,16 +453,16 @@
     </a>
     <nav class="site-nav" aria-label="Page sections">
       <a href="#overview">Overview</a>
-      <a href="#attention">Attention</a>
+      <a href="#dx">API</a>
       <a href="#alignment">Alignment</a>
       <a href="#install">Install</a>
       <a href="#quickstart">Quick start</a>
       <a href="#tokenizers">Tokenizers</a>
       <a href="#generators">Generators</a>
-      <a href="#notebooks">Notebooks</a>
       <a href="#faq">FAQ</a>
     </nav>
-    <div>
+    <div style="display:flex;gap:0.5rem">
+      <a class="btn btn-secondary" href="./api/">Docs</a>
       <a class="btn btn-primary" href="https://github.com/niklasbubeck/MedLat">GitHub</a>
     </div>
   </header>
@@ -471,7 +471,7 @@
     <!-- ── HERO ──────────────────────────────────────────────────────────── -->
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-glow" aria-hidden="true"></div>
-      <p class="hero-badge" role="status">Med · Lat · One registry · 200+ models</p>
+      <p class="hero-badge" role="status">Med · Lat · One registry · 200+ models · v0.1.4</p>
       <h1 id="hero-title">
         One registry.<br>
         Every <span class="word-med">tokenizer</span>.<br>
@@ -486,8 +486,8 @@
       </p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="https://github.com/niklasbubeck/MedLat">Grab the repo</a>
-        <a class="btn btn-secondary" href="#quickstart">Quick start</a>
-        <a class="btn btn-ghost" href="./llms.txt">llms.txt</a>
+        <a class="btn btn-secondary" href="./api/">Documentation</a>
+        <a class="btn btn-ghost" href="#quickstart">Quick start</a>
       </div>
       <div class="pill-row" aria-label="Technology tags">
         <span class="pill cool">PyTorch</span>
@@ -498,6 +498,7 @@
         <span class="pill">VQ · LFQ · BSQ · FSQ</span>
         <span class="pill">2D + 3D volumes</span>
         <span class="pill cool">DINOv2 · MAE · BiomedCLIP alignment</span>
+        <span class="pill hot">Self-Flow · DDPM · Flow Matching</span>
         <span class="pill">MIT License</span>
       </div>
     </section>
@@ -509,7 +510,7 @@
         <div class="stat"><div class="num">200+</div><div class="label">registered model IDs</div></div>
         <div class="stat"><div class="num">10+</div><div class="label">tokenizer families</div></div>
         <div class="stat"><div class="num">11</div><div class="label">generator families</div></div>
-        <div class="stat"><div class="num">3</div><div class="label">SDPA backends</div></div>
+        <div class="stat"><div class="num">3</div><div class="label">scheduler paradigms<br><small style="font-size:0.75rem;opacity:0.75">DDPM · Flow · Self-Flow</small></div></div>
         <div class="stat"><div class="num">3</div><div class="label">alignment targets<br><small style="font-size:0.75rem;opacity:0.75">DINOv2 · MAE · BiomedCLIP</small></div></div>
         <div class="stat"><div class="num">2D+3D</div><div class="label">same API</div></div>
       </div>
@@ -757,6 +758,76 @@ tok_med = get_model(<span class="s">"continuous.aekl.f8_d16"</span>,
       </div>
     </section>
 
+    <!-- ── DEVELOPER EXPERIENCE ─────────────────────────────────────────── -->
+    <section class="block" id="dx" aria-labelledby="h-dx">
+      <h2 id="h-dx">Zero-friction API</h2>
+      <p style="color:var(--muted);max-width:70ch;margin:0 0 1.25rem">
+        v0.1.4 ships a suite of developer-experience improvements that eliminate the
+        most common friction points when wiring models together.
+      </p>
+      <div class="grid-2">
+
+        <div class="card">
+          <p style="margin:0 0 0.5rem;font-weight:700;color:var(--med)">Stop guessing kwargs</p>
+          <p style="margin:0 0 0.75rem;font-size:0.92rem;color:var(--muted)">
+            <code>suggest_generator_params(tokenizer)</code> inspects any tokenizer and
+            returns the exact kwargs its generator needs — no more hunting for
+            <code>in_channels</code> or <code>vae_stride</code> by hand.
+          </p>
+          <pre class="code" style="margin:0;font-size:0.8rem" tabindex="0">tok = get_model(<span class="s">"continuous.aekl.f8_d16"</span>, img_size=<span class="s">256</span>)
+gen = get_model(<span class="s">"dit.xl_2"</span>, img_size=<span class="s">256</span>, num_classes=<span class="s">1000</span>,
+                **suggest_generator_params(tok))
+<span class="c"># → {'vae_stride': 8, 'in_channels': 16}</span></pre>
+        </div>
+
+        <div class="card">
+          <p style="margin:0 0 0.5rem;font-weight:700;color:var(--lad-warm)">Inspect before you build</p>
+          <p style="margin:0 0 0.75rem;font-size:0.92rem;color:var(--muted)">
+            <code>get_model_signature(name)</code> uses Python's <code>inspect</code> module
+            to show every parameter a builder accepts — always in sync, zero docs lag.
+          </p>
+          <pre class="code" style="margin:0;font-size:0.8rem" tabindex="0">get_model_signature(<span class="s">"dit.xl_2"</span>)
+<span class="c"># → {'img_size': '&lt;required&gt;',</span>
+<span class="c">#    'vae_stride': '&lt;required&gt;',</span>
+<span class="c">#    'in_channels': '&lt;required&gt;',</span>
+<span class="c">#    'num_classes': 10, 'learn_sigma': True, …}</span></pre>
+        </div>
+
+        <div class="card">
+          <p style="margin:0 0 0.5rem;font-weight:700;color:var(--lad)">Instant error diagnosis</p>
+          <p style="margin:0 0 0.75rem;font-size:0.92rem;color:var(--muted)">
+            <code>GenWrapper</code> validates the tokenizer–generator pair at construction time
+            and tells you exactly how to fix the mismatch — no silent failures, no puzzling
+            runtime crashes.
+          </p>
+          <pre class="code" style="margin:0;font-size:0.8rem" tabindex="0">GenWrapper(gen, tok)
+<span class="c"># ValueError: Channel mismatch: DiT.in_channels=4</span>
+<span class="c">#   but AEKL.embed_dim=16.</span>
+<span class="c">#   → Rebuild with in_channels=16, or pass</span>
+<span class="c">#     **suggest_generator_params(tokenizer)</span></pre>
+        </div>
+
+        <div class="card">
+          <p style="margin:0 0 0.5rem;font-weight:700;color:var(--accent-2)">Discover schedulers like models</p>
+          <p style="margin:0 0 0.75rem;font-size:0.92rem;color:var(--muted)">
+            The new scheduler discovery API mirrors the model registry — list what's available,
+            read full metadata, then create. DDPM, Flow Matching, and Self-Flow all in one factory.
+          </p>
+          <pre class="code" style="margin:0;font-size:0.8rem" tabindex="0">available_schedulers()
+<span class="c"># → ('diffusion', 'flow', 'self_flow')</span>
+info = scheduler_info(<span class="s">"self_flow"</span>)
+<span class="k">print</span>(info.samplers, info.optional_kwargs)
+sched = create_scheduler(<span class="s">"flow"</span>, path_type=<span class="s">"Linear"</span>)</pre>
+        </div>
+
+      </div>
+      <p style="margin-top:1.25rem;color:var(--muted);font-size:0.95rem">
+        <code>GenWrapper</code> also has a clean <code>__repr__</code> — <code>print(wrapper)</code> shows the routing mode,
+        model class names, and current <code>scale_factor</code> at a glance.
+        Full reference at <a href="./api/api/wrapper.html" style="color:var(--med)">API docs → GenWrapper</a>.
+      </p>
+    </section>
+
     <!-- ── INSTALL ───────────────────────────────────────────────────────── -->
     <section class="block" id="install" aria-labelledby="h-install">
       <h2 id="h-install">Installation</h2>
@@ -780,34 +851,39 @@ python tests/registry_integration.py     <span class="c"># full forward-pass sui
     <!-- ── QUICKSTART ────────────────────────────────────────────────────── -->
     <section class="block" id="quickstart" aria-labelledby="h-quick">
       <h2 id="h-quick">Quick start</h2>
-      <pre class="code" tabindex="0"><span class="k">from</span> medlat <span class="k">import</span> get_model, available_models, get_model_info, GenWrapper
+      <pre class="code" tabindex="0"><span class="k">from</span> medlat <span class="k">import</span> (get_model, available_models, get_model_info,
+                   get_model_signature, suggest_generator_params,
+                   GenWrapper, create_scheduler, available_schedulers)
 
 <span class="c"># ── Discover what's registered ────────────────────────────────────────</span>
-<span class="k">print</span>(len(<span class="k">list</span>(available_models())))        <span class="c"># 200+</span>
-<span class="k">print</span>(<span class="k">list</span>(available_models(<span class="s">"discrete.vq."</span>))) <span class="c"># VQ-only</span>
-info = get_model_info(<span class="s">"continuous.vavae.f8_d32_dinov2"</span>)
+available_models()                              <span class="c"># all 200+ IDs</span>
+available_models(<span class="s">"discrete.vq."</span>)             <span class="c"># VQ-only</span>
+get_model_signature(<span class="s">"dit.xl_2"</span>)               <span class="c"># see required kwargs first</span>
 
-<span class="c"># ── Pipeline 1: Continuous VAE + DiT ─────────────────────────────────</span>
-tokenizer = get_model(<span class="s">"continuous.aekl.f8_d16"</span>, img_size=<span class="s">224</span>)
-generator = get_model(<span class="s">"dit.xl_2"</span>,
-    img_size=<span class="s">224</span>, vae_stride=tokenizer.vae_stride,
-    in_channels=tokenizer.embed_dim, num_classes=<span class="s">10</span>)
-wrapper = GenWrapper(generator, tokenizer)
+<span class="c"># ── Pipeline 1: Continuous VAE + DiT — params inferred automatically ─</span>
+tok = get_model(<span class="s">"continuous.aekl.f8_d16"</span>, img_size=<span class="s">224</span>)
+gen = get_model(<span class="s">"dit.xl_2"</span>, img_size=<span class="s">224</span>, num_classes=<span class="s">10</span>,
+                **suggest_generator_params(tok))  <span class="c"># → vae_stride=8, in_channels=16</span>
+wrapper = GenWrapper(gen, tok)
+<span class="k">print</span>(wrapper)  <span class="c"># routing · model names · scale_factor</span>
 
 <span class="c"># ── Pipeline 2: Continuous VAE + MAR ─────────────────────────────────</span>
-tokenizer = get_model(<span class="s">"continuous.vavae.f8_d32_dinov2"</span>, img_size=<span class="s">224</span>)
-generator = get_model(<span class="s">"mar.b"</span>,
-    img_size=<span class="s">224</span>, vae_stride=<span class="s">8</span>, in_channels=<span class="s">32</span>, class_num=<span class="s">10</span>)
-wrapper = GenWrapper(generator, tokenizer)
+tok = get_model(<span class="s">"continuous.vavae.f8_d32_dinov2"</span>, img_size=<span class="s">224</span>)
+gen = get_model(<span class="s">"mar.b"</span>, img_size=<span class="s">224</span>, class_num=<span class="s">10</span>,
+                **suggest_generator_params(tok))
+wrapper = GenWrapper(gen, tok)
 loss = wrapper(wrapper.vae_encode(images), y=labels)
 
 <span class="c"># ── Pipeline 3: Discrete VQ + MaskGIT ────────────────────────────────</span>
-tokenizer = get_model(<span class="s">"discrete.vq.f8_d4_e16384"</span>, img_size=<span class="s">224</span>)
-generator = get_model(<span class="s">"maskgit.b"</span>,
-    img_size=<span class="s">224</span>, vae_stride=tokenizer.vae_stride,
-    num_tokens=tokenizer.n_embed, num_classes=<span class="s">10</span>)
-wrapper = GenWrapper(generator, tokenizer)
-loss = wrapper(wrapper.vae_encode(images), y=labels)</pre>
+tok = get_model(<span class="s">"discrete.vq.f8_d4_e16384"</span>, img_size=<span class="s">224</span>)
+gen = get_model(<span class="s">"maskgit.b"</span>, img_size=<span class="s">224</span>, num_classes=<span class="s">10</span>,
+                **suggest_generator_params(tok))
+wrapper = GenWrapper(gen, tok)
+
+<span class="c"># ── Schedulers — discover, inspect, create ────────────────────────────</span>
+available_schedulers()                          <span class="c"># ('diffusion', 'flow', 'self_flow')</span>
+sched = create_scheduler(<span class="s">"self_flow"</span>, masking_strategy=<span class="s">"complexity"</span>)
+sched = create_scheduler(<span class="s">"flow"</span>,     path_type=<span class="s">"Linear"</span>, prediction=<span class="s">"velocity"</span>)</pre>
     </section>
 
     <!-- ── TOKENIZERS ────────────────────────────────────────────────────── -->
@@ -1171,7 +1247,7 @@ loss = wrapper(wrapper.vae_encode(images), y=labels)</pre>
       </details>
       <details>
         <summary>Where is the full documentation?</summary>
-        <p>The canonical reference is <a href="https://github.com/niklasbubeck/MedLat/blob/main/README.md">README.md</a> on GitHub. This page is the browsable / SEO-friendly summary.</p>
+        <p>The <a href="./api/" style="color:var(--med)">API documentation</a> covers every public symbol with full signatures and examples. The canonical narrative reference is <a href="https://github.com/niklasbubeck/MedLat/blob/main/README.md">README.md</a> on GitHub.</p>
       </details>
       <details>
         <summary>Machine-readable summary for agents?</summary>
@@ -1186,7 +1262,8 @@ loss = wrapper(wrapper.vae_encode(images), y=labels)</pre>
       <span style="color:var(--med)">medical</span> rigour ·
       <span style="color:var(--lad-warm)">mad-lad</span> energy ·
       MIT License · <code>pip install -e .</code> ·
-      <a href="https://github.com/niklasbubeck/MedLat">GitHub</a>
+      <a href="https://github.com/niklasbubeck/MedLat">GitHub</a> ·
+      <a href="./api/">Documentation</a>
     </p>
   </footer>
 </body>
