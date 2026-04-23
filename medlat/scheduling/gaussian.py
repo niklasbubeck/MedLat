@@ -87,6 +87,8 @@ def create_gaussian_diffusion(
     rescale_timesteps: bool = False,
     rescale_learned_sigmas: bool = False,
     timestep_respacing: str = "",
+    latent_dim: Optional[int] = None,
+    base_dim: int = 4096,
 ) -> GaussianDiffusionScheduler:
     """Factory for GaussianDiffusionScheduler.
 
@@ -101,6 +103,13 @@ def create_gaussian_diffusion(
         rescale_learned_sigmas: Rescale the learned sigmas.
         timestep_respacing:     Comma-separated step counts for respacing,
                                 or 'ddimN' for DDIM-style striding.
+        latent_dim:             Effective data dimension ``m`` for the
+                                dimension-aware Esser et al. (2024) timestep
+                                shift. When set, training and sampling use a
+                                shifted timestep distribution. ``None``
+                                (default) preserves the original schedule.
+        base_dim:               Reference dimension ``n`` paired with
+                                ``latent_dim``. Defaults to 4096 per the paper.
 
     Returns:
         GaussianDiffusionScheduler ready for training_losses / p_sample_loop.
@@ -131,5 +140,7 @@ def create_gaussian_diffusion(
         ),
         loss_type=loss_type,
         rescale_timesteps=rescale_timesteps,
+        latent_dim=latent_dim,
+        base_dim=base_dim,
     )
     return GaussianDiffusionScheduler(diffusion)

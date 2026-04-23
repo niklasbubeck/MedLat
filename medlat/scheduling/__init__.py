@@ -82,6 +82,8 @@ _SCHEDULER_CATALOG: Dict[str, SchedulerInfo] = {
             "use_kl":                  ("bool", False,   "Use rescaled KL loss instead of MSE."),
             "rescale_timesteps":       ("bool", False,   "Scale timesteps to [0, 1000] range."),
             "timestep_respacing":      ("str",  "",      "Comma-sep step counts or 'ddimN' for striding."),
+            "latent_dim":              ("int",  None,    "Effective data dim `m` for Esser et al. (2024) timestep shift. None disables."),
+            "base_dim":                ("int",  4096,    "Reference dim `n` for the Esser shift (paper baseline)."),
         },
         paper_url="https://arxiv.org/abs/2006.11239",
     ),

@@ -73,6 +73,22 @@ get_model_signature("dit.xl_2")
 #    'in_channels': '<required>', 'num_classes': 10, 'learn_sigma': True, …}
 ```
 
+### Load, then tweak — without rebuilding a config
+
+Every model produced by `get_model()` carries a snapshot of the kwargs it was built with (`model.config` / `model._medlat_config`). **`clone_with(model, **overrides)`** rebuilds a fresh instance through the registry with one or more fields swapped — no need to remember the original call site or assemble a config dict:
+
+```python
+from medlat import get_model, clone_with
+
+tok       = get_model("discrete.vq.f4_d3_e8192", img_size=256)
+tok_wide  = clone_with(tok, z_channels=16)          # only z_channels changes
+tok_hires = clone_with(tok_wide, img_size=512)      # chain as many tweaks as you like
+
+tok.config          # → {'img_size': 256}           — introspect what you built
+```
+
+`clone_with` returns a freshly-initialised instance (weights are not carried over); it's designed for fast iteration on architecture search, not for checkpoint reloading.
+
 ### Actionable error messages
 
 `GenWrapper` now validates the tokenizer–generator pair at construction and tells you exactly how to fix a mismatch:
@@ -125,7 +141,7 @@ python tests/registry_integration.py
 ## Quick start
 
 ```python
-from medlat import (get_model, available_models, get_model_info,
+from medlat import (get_model, clone_with, available_models, get_model_info,
                     get_model_signature, suggest_generator_params,
                     GenWrapper, create_scheduler, available_schedulers)
 
@@ -478,7 +494,7 @@ Standalone quantizer modules (for custom VQ composition):
 | **LDM** | Latent Diffusion UNet (various strides) | `ldm.f1` … `ldm.f16` | [arXiv](https://arxiv.org/abs/2112.10752) |
 | **ADM** | Dhariwal–Nichol UNet + class-conditional classifiers | `adm.diffusion.{64,128,256,512}{C,U}`, `adm.classifier.*` | [arXiv](https://arxiv.org/abs/2105.05233) |
 
-All diffusion generators integrate with `medlat.diffusion.create_gaussian_diffusion`.
+All diffusion generators integrate with `medlat.scheduling.create_gaussian_diffusion`.
 
 ---
 

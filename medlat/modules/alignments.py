@@ -8,6 +8,8 @@ import math
 import numpy as np
 import torchvision.transforms as T
 
+from medlat.modules.metrics import MetricLoggerMixin
+
 # For external models (DINO, CLIP) - try importing timm but make it optional
 try:
     from timm import create_model
@@ -188,7 +190,7 @@ class _Denormalize(nn.Module):
         return x * self.std + self.mean
 
 
-class AlignmentModule(ABC, nn.Module):
+class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
     """Base class for auxiliary alignment modules.
 
     Each module contains a decoder (``MAETokViTDecoder``), projection heads
@@ -205,6 +207,12 @@ class AlignmentModule(ABC, nn.Module):
     ``interpolate_zq`` is the raw quant tokens for skip connections (or ``None``),
     and ``H, W, D`` are the spatial dimensions (pass ``None`` for 2-D inputs).
     The decoder must return a token sequence shaped ``(B, L, embed_dim)``.
+
+    **Observability** — inherits ``log_metric`` / ``get_metrics`` /
+    ``reset_metrics`` from :class:`MetricLoggerMixin`. Every :meth:`forward`
+    call auto-logs ``"alignment_loss"``; the owning first-stage autoencoder
+    (:class:`VQModelBase` / :class:`AutoencoderKLBase`) merges this into
+    ``model.get_metrics()``.
     """
 
     def __init__(self, name: str):
@@ -274,6 +282,7 @@ class AlignmentModule(ABC, nn.Module):
             loss = mean_flat(per_token.squeeze(-1))
             loss = loss.mean()
 
+        self.log_metric("alignment_loss", loss.detach())
         return loss, pred
 
     # ------------------------------------------------------------------ #
@@ -740,5 +749,7 @@ class VFFoundationAlignment(AlignmentModule):
         ).mean()
 
         vf_loss = vf_loss_1 * self.distmat_weight + vf_loss_2 * self.cos_weight
-        # print(vf_loss_1, vf_loss_2, vf_loss)
+        self.log_metric("alignment_loss", vf_loss.detach())
+        self.log_metric("vf_loss_distmat", vf_loss_1.detach())
+        self.log_metric("vf_loss_cos", vf_loss_2.detach())
         return vf_loss, z_proj

@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 from tqdm import tqdm
 
-from medlat.diffusion.diffloss import DiffLoss
+from medlat.scheduling.diffloss import DiffLoss
 from .modules import Block, Transformer, modulate
 import math
 from medlat.modules.in_and_out import PatchEmbed, ToPixel

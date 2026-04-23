@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import logging
-from typing import Any, Mapping, Literal
+import os
+import urllib.request
+from typing import Any, Literal, Mapping
+from urllib.parse import urlparse
 
 import torch
 import torch.nn as nn
@@ -41,14 +45,6 @@ def get_model_type(model: nn.Module) -> Literal["continuous", "discrete", "token
         f"Cannot determine model type for {model.__class__.__qualname__}. "
         f"Inherit from one of the base classes in medlat.base."
     )
-
-from typing import Any
-import hashlib
-import os
-import urllib.request
-from urllib.parse import urlparse
-
-import torch
 
 
 def _resolve_ckpt_path(path: str) -> str:

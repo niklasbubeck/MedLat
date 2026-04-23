@@ -1,8 +1,73 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, Optional
+
+logger = logging.getLogger(__name__)
+
+
+def _capture_call(
+    builder: Callable[..., Any],
+    args: tuple,
+    kwargs: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Return a kwargs-only snapshot of how ``builder`` was called.
+
+    Positional arguments are bound to their parameter names via
+    :func:`inspect.signature`, and any values that arrived through a
+    ``**kwargs`` catch-all are hoisted to the top level.  ``*args`` overflow (if
+    any) is dropped — it can't be replayed by name and is vanishingly rare for
+    MedLat factories. Falls back to the raw kwargs dict if signature binding
+    fails for any reason.
+    """
+    try:
+        sig = inspect.signature(builder)
+        bound = sig.bind_partial(*args, **kwargs)
+    except (TypeError, ValueError):
+        return dict(kwargs)
+
+    captured: Dict[str, Any] = {}
+    for param_name, value in bound.arguments.items():
+        param = sig.parameters[param_name]
+        if param.kind is inspect.Parameter.VAR_POSITIONAL:
+            continue  # can't round-trip as a kwarg
+        if param.kind is inspect.Parameter.VAR_KEYWORD:
+            # flatten **kwargs catch-all into top-level keys
+            if isinstance(value, dict):
+                captured.update(value)
+            continue
+        captured[param_name] = value
+    return captured
+
+
+def _attach_provenance(
+    result: Any,
+    name: str,
+    config: Dict[str, Any],
+) -> None:
+    """Tag ``result`` with the registry name + config it was built from.
+
+    Always sets ``_medlat_name`` and ``_medlat_config`` — these are the source
+    of truth that :func:`clone_with` reads from. Also exposes a friendlier
+    ``config`` attribute, but only if the model doesn't already define one
+    (so we don't clobber HuggingFace-style configs on wrapped models).
+
+    Silently no-ops if ``result`` doesn't accept attribute assignment (e.g. a
+    primitive returned by a test builder).
+    """
+    try:
+        setattr(result, "_medlat_name", name)
+        setattr(result, "_medlat_config", dict(config))
+    except (AttributeError, TypeError):
+        return  # immutable / __slots__-locked result — nothing more we can do
+
+    if not hasattr(result, "config"):
+        try:
+            setattr(result, "config", dict(config))
+        except (AttributeError, TypeError):
+            pass
 
 
 @dataclass(slots=True)
@@ -44,7 +109,25 @@ class ModelEntry:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def instantiate(self, *args: Any, **kwargs: Any) -> Any:
-        return self.builder(*args, **kwargs)
+        """Call the underlying builder and tag the result with provenance.
+
+        After construction, the returned object carries:
+
+        * ``_medlat_name`` — the registry name used to build it;
+        * ``_medlat_config`` — the kwargs dict the builder was called with
+          (with positional args bound to their parameter names and any
+          ``**kwargs`` catch-all flattened to the top level);
+        * ``config`` — same as ``_medlat_config``, set only if the object
+          doesn't already expose a ``config`` attribute.
+
+        The provenance is what lets :func:`clone_with` rebuild the same model
+        with a field overridden. If the builder returns a non-mutable type,
+        tagging silently no-ops so the core behavior is unchanged.
+        """
+        result = self.builder(*args, **kwargs)
+        snapshot = _capture_call(self.builder, args, kwargs)
+        _attach_provenance(result, self.name, snapshot)
+        return result
 
     def to_info(self) -> ModelInfo:
         """Return display-only info (no builder)."""
@@ -59,7 +142,12 @@ class ModelEntry:
 
 
 class ModelRegistry:
-    """Central registry that keeps track of model builder callables."""
+    """Central registry that keeps track of model builder callables.
+
+    Names are compared case-insensitively after stripping whitespace — that is,
+    ``"DiT.XL_2"`` and ``"dit.xl_2"`` refer to the same entry.  The canonical
+    (original-case) name is preserved in :class:`ModelEntry` for display.
+    """
 
     def __init__(self) -> None:
         self._registry: Dict[str, ModelEntry] = {}
@@ -80,6 +168,22 @@ class ModelRegistry:
         ckpt_path: Optional[str] = None,
         override: bool = False,
     ) -> ModelEntry:
+        """Register ``builder`` under ``name`` and return the stored entry.
+
+        Args:
+            name: identifier used by :func:`get_model`. Case-insensitive.
+            builder: any callable that returns an instantiated model.
+            metadata: free-form dict attached to the entry.
+            code_url: optional URL to the model's reference implementation.
+            description: short human-readable description.
+            paper_url: optional URL to the model's paper.
+            ckpt_path: optional path / URL of an official checkpoint.
+            override: if ``False`` (default) re-registering the same name raises
+                :class:`ValueError`; pass ``True`` to replace an existing entry.
+
+        Raises:
+            ValueError: if ``name`` is already registered and ``override=False``.
+        """
         key = self._normalize(name)
         if not override and key in self._registry:
             raise ValueError(f"Model '{name}' already registered.")
@@ -98,6 +202,12 @@ class ModelRegistry:
         return entry
 
     def get(self, name: str) -> ModelEntry:
+        """Return the :class:`ModelEntry` registered under ``name``.
+
+        Raises:
+            KeyError: if the name is not registered; the error message lists
+                every currently-registered name.
+        """
         key = self._normalize(name)
         try:
             return self._registry[key]
@@ -112,9 +222,16 @@ class ModelRegistry:
         return self.get(name).to_info()
 
     def create(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        """Instantiate the model registered under ``name`` with the given args."""
         return self.get(name).instantiate(*args, **kwargs)
 
     def available(self, prefix: Optional[str] = None) -> Iterable[str]:
+        """Return a sorted tuple of registered model names.
+
+        Args:
+            prefix: if given, only names whose normalised form starts with
+                ``prefix`` (case-insensitive) are returned.
+        """
         if prefix is None:
             return tuple(sorted(e.name for e in self._registry.values()))
         normalized = self._normalize(prefix)
@@ -137,8 +254,20 @@ def register_model(
     ckpt_path: Optional[str] = None,
     override: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """
-    Helper that registers a model builder either directly or as a decorator.
+    """Register a model builder, either directly or as a decorator.
+
+    Usage::
+
+        @register_model("my.vqgan.v1", description="My tweaked VQ-GAN")
+        def build_vqgan(img_size: int = 256, **kw):
+            return VQGAN(img_size=img_size, **kw)
+
+        # equivalent direct form:
+        register_model("my.vqgan.v1", build_vqgan, description="My tweaked VQ-GAN")
+
+    See :meth:`ModelRegistry.register` for a description of the metadata
+    arguments. Returns the decorator (or the wrapped function, when used
+    directly).
     """
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -215,4 +344,43 @@ def get_model_info(name: str) -> ModelInfo:
 def available_models(prefix: Optional[str] = None) -> Iterable[str]:
     """List the registered model identifiers."""
     return MODEL_REGISTRY.available(prefix=prefix)
+
+
+def clone_with(model: Any, **overrides: Any) -> Any:
+    """Rebuild ``model`` via the registry with one or more kwargs overridden.
+
+    This is the fast iteration primitive: tweak a single field without
+    constructing a new config dict or re-reading the builder's source.  The
+    returned object is a **fresh instance** — random initialisation differs
+    from the original, and any trained weights on the input are *not* carried
+    over.
+
+    Example::
+
+        from medlat import get_model, clone_with
+
+        tok = get_model("discrete.vq.f4_d3_e8192")
+        tok_big = clone_with(tok, z_channels=16)       # only z_channels changes
+        tok_big_highres = clone_with(tok_big, img_size=512)
+
+    Args:
+        model: an object produced by :func:`get_model` (or anything exposing
+            the ``_medlat_name`` and ``_medlat_config`` provenance tags that
+            :meth:`ModelEntry.instantiate` attaches).
+        **overrides: kwargs to merge on top of the original construction dict.
+
+    Raises:
+        ValueError: if ``model`` does not carry the registry provenance tags —
+            typically because it wasn't built via :func:`get_model`.
+    """
+    name = getattr(model, "_medlat_name", None)
+    if name is None:
+        raise ValueError(
+            f"clone_with() requires a model built via get_model(); got "
+            f"{type(model).__name__}, which has no registered provenance. "
+            "If you built the model manually, call get_model(...) to enable cloning."
+        )
+    base_config: Dict[str, Any] = getattr(model, "_medlat_config", {}) or {}
+    merged = {**base_config, **overrides}
+    return get_model(name, **merged)
 

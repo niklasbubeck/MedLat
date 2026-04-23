@@ -133,10 +133,12 @@ class ContinuousFirstStage(FirstStageModel, ABC):
 class DiscreteFirstStage(FirstStageModel, ABC):
     """First-stage model with a discrete (codebook) latent space.
 
-    ``encode(x)`` must return a 3-tuple ``(quant, loss, info)`` where ``quant`` is the
-    quantized feature map ``(B, D, H', W')``, ``loss`` is a scalar codebook commitment
-    loss, and ``info`` is a 3-tuple whose last element contains the flat codebook
-    indices ``(B, H'*W')``, or a list of per-stage tensors for residual VQ.
+    ``encode(x)`` must return a 3-tuple ``(quant, loss, indices)`` where
+    ``quant`` is the quantized feature map ``(B, D, H', W')``, ``loss`` is a
+    scalar codebook commitment loss, and ``indices`` is a ``Tensor`` of flat
+    codebook indices ``(B, H'*W')`` for single-stage quantizers, or a
+    ``List[Tensor]`` of per-stage indices for residual / multi-level
+    quantizers.
 
     ``decode(quant)`` must return a ``(B, C_in, H, W)`` float tensor.
 

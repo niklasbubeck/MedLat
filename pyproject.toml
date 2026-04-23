@@ -79,8 +79,9 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "black>=23.0.0",
-    "flake8>=6.0.0",
+    "ruff>=0.5.0",
     "mypy>=1.0.0",
+    "pre-commit>=3.5.0",
     "build>=1.0.0",
     "twine>=5.1.0",
 ]
@@ -99,11 +100,77 @@ exclude = ["tests*"]
 line-length = 100
 target-version = ['py39', 'py310', 'py311', 'py312']
 
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = [
+    "medlat.egg-info",
+    "docs/source/conf.py",
+    "examples",
+]
+
+[tool.ruff.lint]
+# Conservative default: catch real bugs and hygiene issues without touching style.
+# Expand over time as the codebase gets cleaner.
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (unused imports, undefined names, etc.)
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",   # line-too-long (handled by black)
+    "E741",   # ambiguous variable names (common in ML: `l`, `I`, `O`)
+    "B008",   # function calls in defaults (torch.nn pattern)
+    "B905",   # zip without strict= (py310+ only)
+    "UP006",  # keep `typing.List` etc. for py39 compat
+    "UP007",  # keep `Optional[X]` etc. for py39 compat
+    "UP035",  # keep deprecated typing aliases for py39 compat
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]   # re-exports & wildcard imports are intentional here
+"tests/*" = ["F401", "F811"]       # fixtures & re-imports are common in pytest
+
+[tool.ruff.lint.isort]
+known-first-party = ["medlat"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+# Codebase-wide strictness is deferred until type-hint coverage improves.
+# Per-module strictness can be layered on incrementally via [[tool.mypy.overrides]].
+files = [
+    "medlat/base.py",
+    "medlat/utils.py",
+    "medlat/modules/wrapper.py",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["medlat"]
+omit = [
+    "medlat/*/register.py",
+    "medlat/*/*/register.py",
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
 
 
 

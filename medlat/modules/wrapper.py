@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import logging
+from typing import Any, Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Dict, Any, Optional
-from medlat.utils import init_from_ckpt, get_model_type, validate_compatibility
+
+from medlat.utils import get_model_type, init_from_ckpt, validate_compatibility
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +68,39 @@ class GenWrapper(nn.Module):
 
     def __init__(
         self,
-        generator: Optional[Dict[str, Any]],
-        first_stage: Optional[Dict[str, Any]],
-        scale_factor: float = None,
+        generator: Optional[nn.Module],
+        first_stage: Optional[nn.Module],
+        scale_factor: Optional[float] = None,
         ckpt_path: Optional[str] = None,
         scale_steps: int = 100,
-    ):
+    ) -> None:
+        """Build a glue layer pairing a frozen tokenizer with a trainable generator.
+
+        Args:
+            generator: a registered generator model (subclass of
+                :class:`~medlat.base.AutoregressiveGenerator` or
+                :class:`~medlat.base.NonAutoregressiveGenerator`). May be ``None``
+                only for legacy inference-only setups.
+            first_stage: a registered first-stage tokenizer (subclass of
+                :class:`~medlat.base.ContinuousFirstStage`,
+                :class:`~medlat.base.DiscreteFirstStage`, or
+                :class:`~medlat.base.TokenFirstStage`). Frozen on construction.
+            scale_factor: multiplicative factor applied to encoded latents to
+                normalise their variance. ``None`` (default) auto-estimates over
+                the first ``scale_steps`` training batches; pass a float to fix
+                it forever (e.g. 0.18215 for SD 1.x).
+            ckpt_path: optional path or http(s) URL of a checkpoint to restore
+                into the wrapper (weights are merged into both submodules).
+            scale_steps: number of training batches to average over when
+                auto-estimating ``scale_factor``. Ignored if ``scale_factor`` is
+                an explicit float.
+
+        Raises:
+            ValueError: if the routing combination of first-stage / generator
+                types is unsupported, or if a dimensional mismatch is detected.
+            AttributeError: if either submodule is missing required attributes
+                (``embed_dim``, ``n_embed``, ``in_channels``, …).
+        """
         super().__init__()
         self.generator = generator
         self.generator_type = get_model_type(generator)
@@ -137,7 +168,9 @@ class GenWrapper(nn.Module):
     # ---------------------------------------------------------------------
     # Validation
     # ---------------------------------------------------------------------
-    def _validate_at_construction(self):
+    def _validate_at_construction(self) -> None:
+        """Fail fast if the submodules are missing required attributes or if
+        their codebook / channel sizes disagree. Called once from ``__init__``."""
         fs_type = self.first_stage_type
         gen_type = self.generator_type
         fs_cls = self.first_stage.__class__.__name__
@@ -215,7 +248,9 @@ class GenWrapper(nn.Module):
     # ---------------------------------------------------------------------
     # Training mode handling
     # ---------------------------------------------------------------------
-    def train(self, mode: bool = True):
+    def train(self, mode: bool = True) -> "GenWrapper":
+        """Set training mode on the generator only; the first stage is always
+        kept in ``eval()`` with ``requires_grad=False``."""
         super().train(mode)
         if self.generator is not None:
             self.generator.train(mode)
@@ -270,6 +305,23 @@ class GenWrapper(nn.Module):
     # Encoding
     # ---------------------------------------------------------------------
     def vae_encode(self, image: torch.Tensor, sample: bool = True) -> torch.Tensor:
+        """Encode a batch of images to latent space under ``torch.no_grad``.
+
+        Dispatches to either ``first_stage.encode`` or
+        ``first_stage.encode_to_prequant`` depending on the routing picked at
+        construction. The returned tensor is multiplied by ``scale_factor``;
+        during training the running std is used to update ``scale_factor`` until
+        it freezes after ``scale_steps`` batches.
+
+        For discrete + autoregressive routing, the return value is a
+        ``(B, N)`` integer tensor of flattened codebook indices; otherwise a
+        ``(B, C, H', W')`` float tensor.
+
+        Args:
+            image: input tensor, typically ``(B, C, H, W)``.
+            sample: kept for interface compatibility with legacy callers;
+                currently unused (VAE sampling is determined by the first stage).
+        """
         if self.first_stage is None:
             return image
 
@@ -282,22 +334,46 @@ class GenWrapper(nn.Module):
             self._update_scale_factor(quant)
         quant = quant * self.scale_factor
 
-        # ---- autoregressive path ----
+        # ``info`` carries the codebook indices directly for discrete first
+        # stages (Tensor for single-level quantizers, list of Tensors for
+        # residual ones). For continuous first stages and for the
+        # ``encode_to_prequant`` routing it is ``None``.
         if info is None:
             return quant
-        else:
-            _, _, indices = info
-            if isinstance(indices, torch.Tensor):  # normal
-                return indices.reshape(image.shape[0], -1)
-            elif isinstance(indices, (list, tuple)):  # residual quantizer
-                indices = [ind.reshape(image.shape[0], -1) for ind in indices]
-                return torch.cat(indices, dim=1)
-            return quant
+
+        # Autoregressive routing expects a flat index tensor the generator can
+        # consume; fall through to the quantised features for any other shape.
+        if isinstance(info, torch.Tensor):
+            return info.reshape(image.shape[0], -1)
+        if isinstance(info, (list, tuple)):
+            flat_per_level = [ind.reshape(image.shape[0], -1) for ind in info]
+            return torch.cat(flat_per_level, dim=1)
+        return quant
 
     # ---------------------------------------------------------------------
     # Decoding
     # ---------------------------------------------------------------------
-    def vae_decode(self, z: torch.Tensor, out_shape=None) -> torch.Tensor:
+    def vae_decode(
+        self,
+        z: torch.Tensor,
+        out_shape: Optional[Tuple[int, ...]] = None,
+    ) -> torch.Tensor:
+        """Decode a latent tensor (or indices, for discrete+AR) back to image space.
+
+        Runs under ``torch.no_grad``. For non-index routings, the scale factor
+        applied in :meth:`vae_encode` is divided out before decoding.
+
+        Args:
+            z: latent tensor from :meth:`vae_encode`. For discrete + autoregressive
+                routing, a ``(B, N)`` integer index tensor is expected.
+            out_shape: required only for discrete + autoregressive routing *if*
+                :meth:`vae_encode` has never been called (otherwise the shape is
+                cached on the module as ``_quant_shape``).
+
+        Raises:
+            RuntimeError: for discrete + autoregressive routing if neither
+                ``out_shape`` nor a cached shape is available.
+        """
         if self.first_stage is None:
             return z
 
@@ -337,7 +413,7 @@ class GenWrapper(nn.Module):
     # ---------------------------------------------------------------------
     # Forward
     # ---------------------------------------------------------------------
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> Any:
         """Pass latent tokens/features directly to the generator.
 
         ``x`` is expected to already be in latent space (i.e. the output of

@@ -9,7 +9,7 @@ import torch.nn as nn
 import random
 from torch.utils.checkpoint import checkpoint
 
-from medlat.diffusion.diffloss import DiffLoss
+from medlat.scheduling.diffloss import DiffLoss
 from medlat.modules.pos_embed import to_ntuple
 
 __all__ = ['MAR']

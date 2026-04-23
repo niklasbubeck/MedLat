@@ -94,8 +94,10 @@ class ode:
         self.t = th.linspace(t0, t1, num_steps)
 
         if timestep_shift > 0:
-            s = timestep_shift
-            self.t = (s * self.t) / (1 + (s - 1) * self.t)
+            # Shared implementation in scheduling.utils — same formula as
+            # Esser et al. (2024), now also used by GaussianDiffusion.
+            from medlat.scheduling.utils import esser_shift
+            self.t = esser_shift(self.t, alpha=timestep_shift)
 
         self.atol = atol
         self.rtol = rtol

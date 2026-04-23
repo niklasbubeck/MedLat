@@ -7,11 +7,13 @@ Docstrings have been added, as well as DDIM sampling and a new collection of bet
 
 import enum
 import math
+from typing import Optional
 
 import numpy as np
 import torch as th
 
 from .losses import normal_kl, discretized_gaussian_log_likelihood
+from .utils import compute_esser_alpha, esser_shift
 
 def mean_flat(tensor):
     """
@@ -117,6 +119,14 @@ class GaussianDiffusion:
     :param rescale_timesteps: if True, pass floating point timesteps into the
                               model so that they are always scaled like in the
                               original paper (0 to 1000).
+    :param latent_dim: effective data dimension ``m`` for the dimension-aware
+                       Esser et al. (2024) timestep shift. If set, every
+                       per-timestep table lookup is performed at the shifted
+                       index ``α·t / (1 + (α-1)·t)`` where ``α = √(m / n)``
+                       and ``n`` defaults to 4096. ``None`` disables the shift
+                       entirely (legacy behavior).
+    :param base_dim: reference dimension ``n`` paired with ``latent_dim``.
+                     Defaults to 4096 per the paper.
     """
 
     def __init__(
@@ -127,11 +137,22 @@ class GaussianDiffusion:
         model_var_type,
         loss_type,
         rescale_timesteps=False,
+        latent_dim: Optional[int] = None,
+        base_dim: int = 4096,
     ):
         self.model_mean_type = model_mean_type
         self.model_var_type = model_var_type
         self.loss_type = loss_type
         self.rescale_timesteps = rescale_timesteps
+
+        # Esser et al. (2024) dimension-aware timestep shift. Kept as an
+        # opt-in so legacy configurations (latent_dim=None) behave exactly
+        # as before.
+        self.latent_dim = latent_dim
+        self.base_dim = base_dim
+        self.alpha_shift: Optional[float] = (
+            compute_esser_alpha(latent_dim, base_dim) if latent_dim is not None else None
+        )
 
         # Use float64 for accuracy.
         betas = np.array(betas, dtype=np.float64)
@@ -172,6 +193,39 @@ class GaussianDiffusion:
             / (1.0 - self.alphas_cumprod)
         )
 
+    # ------------------------------------------------------------------
+    # Timestep warping (Esser et al., 2024 — dimension-aware shift)
+    # ------------------------------------------------------------------
+
+    def _warp_timesteps(self, t: th.Tensor) -> th.Tensor:
+        """Apply the Esser et al. (2024) shift to integer timestep indices.
+
+        The shift operates on normalised time ``u = t / (T - 1) ∈ [0, 1]``;
+        after transforming with :func:`esser_shift`, the result is scaled
+        back to an integer index and clamped into ``[0, T-1]``. When
+        :attr:`alpha_shift` is ``None`` the input is returned unchanged so
+        legacy configurations hit the fast path.
+        """
+        if self.alpha_shift is None or self.alpha_shift == 1.0:
+            # α=1 is the identity — short-circuit to avoid float round-trip
+            # losing a unit at the int conversion step.
+            return t
+        T = self.num_timesteps - 1
+        if T <= 0:
+            return t
+        u = t.float() / T
+        u_shift = esser_shift(u, alpha=self.alpha_shift)
+        return th.clamp((u_shift * T).long(), 0, T)
+
+    def _extract(self, arr, t, broadcast_shape):
+        """Fetch ``arr[t]`` (as a broadcast tensor) at the warped index.
+
+        Centralises the shift so every per-timestep lookup in training and
+        sampling applies it automatically. Falls back to the module-level
+        :func:`_extract_into_tensor` once ``t`` has been warped.
+        """
+        return _extract_into_tensor(arr, self._warp_timesteps(t), broadcast_shape)
+
     def q_mean_variance(self, x_start, t):
         """
         Get the distribution q(x_t | x_0).
@@ -181,10 +235,10 @@ class GaussianDiffusion:
         :return: A tuple (mean, variance, log_variance), all of x_start's shape.
         """
         mean = (
-            _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
+            self._extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
         )
-        variance = _extract_into_tensor(1.0 - self.alphas_cumprod, t, x_start.shape)
-        log_variance = _extract_into_tensor(
+        variance = self._extract(1.0 - self.alphas_cumprod, t, x_start.shape)
+        log_variance = self._extract(
             self.log_one_minus_alphas_cumprod, t, x_start.shape
         )
         return mean, variance, log_variance
@@ -204,8 +258,8 @@ class GaussianDiffusion:
             noise = th.randn_like(x_start)
         assert noise.shape == x_start.shape
         return (
-            _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-            + _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
+            self._extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
+            + self._extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
             * noise
         )
 
@@ -218,11 +272,11 @@ class GaussianDiffusion:
         """
         assert x_start.shape == x_t.shape
         posterior_mean = (
-            _extract_into_tensor(self.posterior_mean_coef1, t, x_t.shape) * x_start
-            + _extract_into_tensor(self.posterior_mean_coef2, t, x_t.shape) * x_t
+            self._extract(self.posterior_mean_coef1, t, x_t.shape) * x_start
+            + self._extract(self.posterior_mean_coef2, t, x_t.shape) * x_t
         )
-        posterior_variance = _extract_into_tensor(self.posterior_variance, t, x_t.shape)
-        posterior_log_variance_clipped = _extract_into_tensor(
+        posterior_variance = self._extract(self.posterior_variance, t, x_t.shape)
+        posterior_log_variance_clipped = self._extract(
             self.posterior_log_variance_clipped, t, x_t.shape
         )
         assert (
@@ -270,10 +324,10 @@ class GaussianDiffusion:
                 model_log_variance = model_var_values
                 model_variance = th.exp(model_log_variance)
             else:
-                min_log = _extract_into_tensor(
+                min_log = self._extract(
                     self.posterior_log_variance_clipped, t, x.shape
                 )
-                max_log = _extract_into_tensor(np.log(self.betas), t, x.shape)
+                max_log = self._extract(np.log(self.betas), t, x.shape)
                 # The model_var_values is [-1, 1] for [min_var, max_var].
                 frac = (model_var_values + 1) / 2
                 model_log_variance = frac * max_log + (1 - frac) * min_log
@@ -291,8 +345,8 @@ class GaussianDiffusion:
                     self.posterior_log_variance_clipped,
                 ),
             }[self.model_var_type]
-            model_variance = _extract_into_tensor(model_variance, t, x.shape)
-            model_log_variance = _extract_into_tensor(model_log_variance, t, x.shape)
+            model_variance = self._extract(model_variance, t, x.shape)
+            model_log_variance = self._extract(model_log_variance, t, x.shape)
 
         def process_xstart(x):
             if denoised_fn is not None:
@@ -332,15 +386,15 @@ class GaussianDiffusion:
     def _predict_xstart_from_eps(self, x_t, t, eps):
         assert x_t.shape == eps.shape, f"shapes dont match with {x_t.shape}, {eps.shape}"
         return (
-            _extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
-            - _extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * eps
+            self._extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
+            - self._extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * eps
         )
 
     def _predict_xstart_from_xprev(self, x_t, t, xprev):
         assert x_t.shape == xprev.shape
         return (  # (xprev - coef2*x_t) / coef1
-            _extract_into_tensor(1.0 / self.posterior_mean_coef1, t, x_t.shape) * xprev
-            - _extract_into_tensor(
+            self._extract(1.0 / self.posterior_mean_coef1, t, x_t.shape) * xprev
+            - self._extract(
                 self.posterior_mean_coef2 / self.posterior_mean_coef1, t, x_t.shape
             )
             * x_t
@@ -348,9 +402,9 @@ class GaussianDiffusion:
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
         return (
-            _extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
+            self._extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
             - pred_xstart
-        ) / _extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
+        ) / self._extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
 
     def _scale_timesteps(self, t):
         if self.rescale_timesteps:
@@ -382,7 +436,7 @@ class GaussianDiffusion:
         Unlike condition_mean(), this instead uses the conditioning strategy
         from Song et al (2020).
         """
-        alpha_bar = _extract_into_tensor(self.alphas_cumprod, t, x.shape)
+        alpha_bar = self._extract(self.alphas_cumprod, t, x.shape)
 
         eps = self._predict_eps_from_xstart(x, t, p_mean_var["pred_xstart"])
         eps = eps - (1 - alpha_bar).sqrt() * cond_fn(
@@ -721,8 +775,8 @@ class GaussianDiffusion:
         # in case we used x_start or x_prev prediction.
         eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
 
-        alpha_bar = _extract_into_tensor(self.alphas_cumprod, t, x.shape)
-        alpha_bar_prev = _extract_into_tensor(self.alphas_cumprod_prev, t, x.shape)
+        alpha_bar = self._extract(self.alphas_cumprod, t, x.shape)
+        alpha_bar_prev = self._extract(self.alphas_cumprod_prev, t, x.shape)
         sigma = (
             eta
             * th.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar))
@@ -765,10 +819,10 @@ class GaussianDiffusion:
         # Usually our model outputs epsilon, but we re-derive it
         # in case we used x_start or x_prev prediction.
         eps = (
-            _extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x.shape) * x
+            self._extract(self.sqrt_recip_alphas_cumprod, t, x.shape) * x
             - out["pred_xstart"]
-        ) / _extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x.shape)
-        alpha_bar_next = _extract_into_tensor(self.alphas_cumprod_next, t, x.shape)
+        ) / self._extract(self.sqrt_recipm1_alphas_cumprod, t, x.shape)
+        alpha_bar_next = self._extract(self.alphas_cumprod_next, t, x.shape)
 
         # Equation 12. reversed
         mean_pred = (
