@@ -1,12 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://niklasbubeck.github.io/MedLat/</loc>
+    <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://niklasbubeck.github.io/MedLat/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://niklasbubeck.github.io/MedLat/"/>
+    <image:image>
+      <image:loc>https://niklasbubeck.github.io/MedLat/assets/og-cover.svg</image:loc>
+      <image:title>MedLat — PyTorch Library for Generative Imaging</image:title>
+      <image:caption>Four plug-and-play pieces in a PyTorch library: autoencoder, generator, alignment module, denoising scheduler.</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://niklasbubeck.github.io/MedLat/api/</loc>
+    <lastmod>2026-04-23</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://niklasbubeck.github.io/MedLat/llms.txt</loc>
+    <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

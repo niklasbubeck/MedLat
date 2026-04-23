@@ -4,6 +4,7 @@ from typing import Tuple, Sequence
 from einops import rearrange
 from einops.layers.torch import Rearrange
 import torch.nn as nn
+import torch.utils.checkpoint as cp
 import numpy as np
 
 
@@ -148,9 +149,10 @@ class PatchEmbed(nn.Module):
 
 
 class ToPixel(nn.Module):
-    def __init__(self, to_pixel='linear', img_size=256, out_channels=3, in_dim=512, patch_size=16) -> None:
+    def __init__(self, to_pixel='linear', img_size=256, out_channels=3, in_dim=512, patch_size=16, use_checkpoint=True) -> None:
         super().__init__()
         self.to_pixel_name = to_pixel
+        self.use_checkpoint = use_checkpoint
         
         # Handle img_size: can be int (2D), tuple of 2 (2D), or tuple of 3 (3D)
         if isinstance(img_size, int):
@@ -215,6 +217,60 @@ class ToPixel(nn.Module):
                     Rearrange("b (p1 p2 p3 c) d h w -> b c (d p1) (h p2) (w p3)", p1=self.patch_size[0], p2=self.patch_size[1], p3=self.patch_size[2]),
                     nn.Conv3d(out_channels, out_channels, 3, padding=1)
                     )
+        elif to_pixel == 'conv_up':
+            # Cross-patch mixing at TOKEN resolution, then depth-to-space.
+            #
+            # Plain 'conv' does 1x1x1 expansion (no spatial mixing) before
+            # depth-to-space, so adjacent patches come from disjoint tokens
+            # and disjoint channel slots -> visible grid. Here we insert k=3
+            # spatial convs at token resolution first, so each token carries
+            # info from a neighborhood of tokens before the shuffle. This
+            # gives each output voxel a ~4-patch receptive field without ever
+            # materializing wide feature maps at full resolution.
+            assert all(p == self.patch_size[0] for p in self.patch_size), \
+                "conv_up assumes isotropic patch size"
+
+            if self.dims == 3:
+                Conv = nn.Conv3d
+                rearr_in = Rearrange(
+                    "b (d h w) c -> b c d h w",
+                    d=self.grid_size[0], h=self.grid_size[1], w=self.grid_size[2],
+                )
+                ps = self.patch_size
+                rearr_out = Rearrange(
+                    "b (p1 p2 p3 c) d h w -> b c (d p1) (h p2) (w p3)",
+                    p1=ps[0], p2=ps[1], p3=ps[2],
+                )
+                patch_volume = ps[0] * ps[1] * ps[2]
+            else:
+                Conv = nn.Conv2d
+                rearr_in = Rearrange(
+                    "b (h w) c -> b c h w",
+                    h=self.grid_size[0], w=self.grid_size[1],
+                )
+                ps = self.patch_size
+                rearr_out = Rearrange(
+                    "b (p1 p2 c) h w -> b c (h p1) (w p2)",
+                    p1=ps[0], p2=ps[1],
+                )
+                patch_volume = ps[0] * ps[1]
+
+            n_mix = 2
+            mid_ch = in_dim
+
+            layers = [rearr_in]
+            for _ in range(n_mix):
+                layers += [
+                    Conv(mid_ch, mid_ch, 3, padding=1),
+                    nn.GroupNorm(num_groups=min(32, mid_ch), num_channels=mid_ch),
+                    nn.SiLU(),
+                ]
+            layers += [
+                Conv(mid_ch, patch_volume * out_channels, 1, padding=0),
+                rearr_out,
+                Conv(out_channels, out_channels, 3, padding=1),
+            ]
+            self.model = nn.Sequential(*layers)
         elif to_pixel == 'siren':
             if self.dims == 2:
                 self.model = nn.Sequential(
@@ -237,6 +293,8 @@ class ToPixel(nn.Module):
         elif self.to_pixel_name == 'siren':
             return self.model[1].linear.weight
         elif self.to_pixel_name == 'conv':
+            return self.model[-1].weight
+        elif self.to_pixel_name == 'conv_up':
             return self.model[-1].weight
         else:
             return None
@@ -290,6 +348,11 @@ class ToPixel(nn.Module):
                            self.patch_size[1] * h, self.patch_size[2] * w)
         elif self.to_pixel_name == 'conv':
             x = self.model(x)
+        elif self.to_pixel_name == 'conv_up':
+            if self.use_checkpoint and self.training and torch.is_grad_enabled():
+                x = cp.checkpoint(self.model, x, use_reentrant=False)
+            else:
+                x = self.model(x)
         elif self.to_pixel_name == 'identity':
             x = self.model(x)
         elif self.to_pixel_name == 'none':

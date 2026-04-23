@@ -1,39 +1,41 @@
 # MedLat
 
-> Name: **medical** (imaging + rigour) + **mad lad** (slang for bold, memorable energy). Unified PyTorch library for first-stage models (tokenizers, continuous/discrete autoencoders, quantizers) and second-stage generators (autoregressive MaskGIT/MAR, diffusion DiT/LDM/ADM). Single string-key model registry: `get_model`, `available_models`, `get_model_info`. **2D CV and 3D medical volumes:** same registry; use `dims=2` vs `dims=3` (and consistent spatial config) on model builders.
-
-## Spatial dimensionality (2D vs 3D)
-- Registered models support **2D computer vision** and **3D volumetric medical imaging** (e.g. CT/MRI-style volumes) through the same IDs; set `dims=2` or `dims=3` and consistent `img_size` / spatial layout when calling `get_model`.
+> Unified PyTorch registry for first-stage models (continuous / discrete autoencoders, quantizers, token sequence models) and latent generators (diffusion DiT/MDT/UViT/LDM/ADM, masked MaskGIT/MAGE/MaskBit, continuous-AR MAR/RAR/FractalGen, causal Taming GPT). Single string-key API: `get_model`, `available_models`, `get_model_info`, `get_model_signature`, `suggest_generator_params`, `clone_with`, `GenWrapper`. **2D and 3D:** same registry — pass `dims=2` or `dims=3`; `img_size` / `patch_size` accept int or per-axis tuple.
 
 ## Primary sources
 - Repository: https://github.com/niklasbubeck/MedLat
-- Human README: https://github.com/niklasbubeck/MedLat/blob/main/README.md
-- Package name (pip): `medlat` (see pyproject.toml)
+- README: https://github.com/niklasbubeck/MedLat/blob/main/README.md
+- API docs: https://niklasbubeck.github.io/MedLat/api/
+- Package name (pip): `medlat` — current version `0.1.4`
 
-## Registry prefixes (families)
+## Registry prefixes
 - `token.*` — TiTok, MAETok, VMAE, DeTok, SoftVQ, ViTA
 - `continuous.*` — AEKL, MAISI, MedVAE, VAVAE, DCAE, soft VQ / WQ-VAE
 - `discrete.*` — VQ, RQ/QINCo family, FSQ, LFQ, BSQ, SimVQ, HCVQ, MaskGIT VQ presets
-- `discrete.quantizer.*` — standalone quantizer modules
-- `maskgit.*`, `mar.*` — autoregressive generators
-- `dit.*`, `ldm.*`, `adm.*` — latent diffusion / UNet generators
+- `discrete.quantizer.*` — standalone quantizer modules, forward returns `(z_q, loss, indices)`
+- `maskgit.*`, `mage.*`, `taming.*`, `maskbit.*`, `mar.*`, `rar.*`, `fractal.*` — autoregressive generators
+- `dit.*`, `mdt.*`, `uvit.*`, `ldm.*`, `adm.*` — diffusion / UNet generators
 
 ## Integration
-- Glue module: `medlat.modules.wrapper.GenWrapper` pairs generator + first stage; respects discrete/continuous and autoregressive/non-autoregressive routes.
+- `medlat.modules.wrapper.GenWrapper` pairs generator + first stage; validates channel / stride / codebook compatibility at construction.
+- `medlat.suggest_generator_params(tokenizer)` returns the exact kwargs to build the paired generator.
+- `medlat.clone_with(model, **overrides)` rebuilds a registry model with fields swapped (no weight transfer).
 
-## Attention backends (PyTorch SDPA)
-- All models use `torch.nn.functional.scaled_dot_product_attention` (SDPA). PyTorch auto-selects the best kernel: FlashAttention (fastest, CUDA + fp16/bf16), memory-efficient attention, or math (universal fallback).
-- Override with `torch.nn.attention.sdpa_kernel(SDPBackend.FLASH_ATTENTION)` context manager (PyTorch ≥ 2.3) or `torch.backends.cuda.sdp_kernel(enable_flash=True, ...)` (PyTorch 2.0/2.1).
-- MDT: float additive relative-position bias as attn_mask — FlashAttention not supported; PyTorch falls back automatically.
-- Taming GPT: `is_causal=True` for training, `is_causal=False` for KV-cache inference.
-- VMAE: falls back to manual attention only when `return_attn_map=True`.
-- UViT / TiTok: use `ATTENTION_MODE` flag; SDPA is the default.
+## Scheduling
+- Single `medlat.scheduling` package — `create_scheduler`, `available_schedulers`, `scheduler_info` — for three paradigms: `diffusion` (GaussianDiffusion, dimension-aware `esser_shift`), `flow` (flow matching), `self_flow`.
+- Legacy `medlat/diffusion` and `medlat/transport` modules have been removed.
+
+## Latent alignment
+- `medlat.modules.alignments.VFFoundationAlignment` — frozen teachers: DINOv2-L, MAE-L, BiomedCLIP. Use the `alignment=` kwarg on any `AutoencoderKL`, or pick a pre-registered `continuous.vavae.*` / `continuous.medvae.*` variant.
+
+## Attention
+- All models use `torch.nn.functional.scaled_dot_product_attention`. PyTorch auto-selects FlashAttention / memory-efficient / math. Override with `torch.nn.attention.sdpa_kernel(SDPBackend.*)` (PyTorch ≥ 2.3).
 
 ## Citation
-BibTeX key `bubeck_medlat_2025` — see README.md **Citation** section or project page `#citation`. Default: Bubeck, N. (2025). *MedLat* v0.1.0. https://github.com/niklasbubeck/MedLat
+BibTeX key `bubeck_medlat_2025` — Bubeck, N. (2025). *MedLat* v0.1.4. https://github.com/niklasbubeck/MedLat
 
 ## License
-MIT — see repository pyproject.toml
+MIT
 
 ## Contact
-Author: Niklas Bubeck (see pyproject.toml authors)
+Author: Niklas Bubeck (see pyproject.toml)
