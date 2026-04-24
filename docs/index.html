@@ -6,10 +6,10 @@
   <meta http-equiv="x-ua-compatible" content="IE=edge" />
 
   <!-- ═══ Primary SEO — title, description, keywords ═══ -->
-  <title>MedLat · PyTorch Library for Generative Imaging · 2D &amp; 3D</title>
-  <meta name="title" content="MedLat · PyTorch Library for Generative Imaging · 2D & 3D" />
-  <meta name="description" content="MedLat — plug-and-play PyTorch library for generative imaging. Combine autoencoders, generators, alignment modules and denoising schedulers. 2D images and 3D medical volumes, one API. MIT licensed." />
-  <meta name="keywords" content="MedLat, medlat, PyTorch library, generative imaging, generative model registry, medical imaging AI, latent diffusion PyTorch, VAE PyTorch, autoencoder library, diffusion transformer, flow matching, self-flow, 3D medical imaging, radiology AI, pathology AI, CT generation, MRI generation, BiomedCLIP, DINOv2, MAE, alignment module, denoising scheduler, PyTorch registry, plug and play AI, Niklas Bubeck, niklasbubeck, medical latent, latent generator, image generation library, generative AI, open source PyTorch, VQ-VAE, LFQ, BSQ, FSQ, GenWrapper, Gaussian diffusion" />
+  <title>MedLat · PyTorch Library for Generative Imaging · DiT, MaskGIT, MAR, VQ-VAE, Flow Matching · 2D &amp; 3D</title>
+  <meta name="title" content="MedLat · PyTorch Library for Generative Imaging · DiT, MaskGIT, MAR, VQ-VAE, Flow Matching · 2D & 3D" />
+  <meta name="description" content="MedLat — plug-and-play PyTorch library for generative imaging. Diffusion Transformers (DiT, MDT, U-ViT), UNet diffusion (LDM, ADM), masked generators (MaskGIT, MAGE, MaskBit, Muse), continuous-AR (MAR, RAR, Fractal), autoencoders (AutoencoderKL, VA-VAE, MedVAE, DCAE), tokenizers (TiTok, MAETok, SoftVQ, VMAE), quantizers (VQ-VAE, LFQ, BSQ, FSQ, QINCo, RQ-VAE, SimVQ), and schedulers (GaussianDiffusion, FlowMatching, Self-Flow) — one registry. 2D and 3D. MIT licensed." />
+  <meta name="keywords" content="MedLat, medlat, PyTorch library, generative imaging, generative model registry, medical imaging AI, latent diffusion PyTorch, VAE PyTorch, autoencoder library, 3D medical imaging, radiology AI, pathology AI, CT generation, MRI generation, alignment module, denoising scheduler, PyTorch registry, plug and play AI, Niklas Bubeck, niklasbubeck, medical latent, latent generator, image generation library, generative AI, open source PyTorch, GenWrapper, Diffusion, Diffusion Transformer, DiffusionTransformer, DiT, DiTs, MDT, Masked Diffusion Transformer, U-ViT, UViT, UNet, UNetModel, ADM, LDM, Latent Diffusion Model, Stable Diffusion architecture, DDPM, DDIM, Gaussian Diffusion, GaussianDiffusion, Flow Matching, FlowMatching, FlowMatchingScheduler, Transport, Self-Flow, SelfFlow, DualTimestepScheduler, Rectified Flow, MaskGIT, MaskGit, MaskGitTransformer, MaskBit, LFQBert, MAGE, Muse, MAR, RAR, Fractal, FractalGen, VAR, Taming, Taming Transformers, Taming GPT, AutoencoderKL, AutoencoderKLTransformer, VAE, KL-VAE, VQ-VAE, VQ-GAN, VQGAN, VQModel, VQModelTransformer, VectorQuantizer, LFQ, Lookup-Free Quantization, BSQ, Binary Spherical Quantization, FSQ, Finite Scalar Quantization, QINCo, QincoResidualQuantizer, RQ-VAE, RQVAE, Residual Vector Quantizer, SimVQ, SoftVQ, SoftVectorQuantizer, HCVQ, MSRQ, Gumbel VQ, VA-VAE, VaVAE, MedVAE, MAISI, DCAE, DCAEEncoder, DCAEDecoder, TiTok, TiTokEncoder, TiTokDecoder, MAETok, MAETokViTEncoder, MAETokViTDecoder, VMAE, ViTA, DeTok, ReconMAE, ViT, Vision Transformer, BiomedCLIP, DINOv2, MAE, Vision-Foundation alignment, VF alignment, tokenizer registry, first-stage model, latent generator, generator backbone" />
   <meta name="author" content="Niklas Bubeck" />
   <meta name="publisher" content="Niklas Bubeck" />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
@@ -68,7 +68,7 @@
   <!-- ═══ Dublin Core metadata (scholarly crawlers) ═══ -->
   <meta name="DC.title" content="MedLat — PyTorch Library for Generative Imaging" />
   <meta name="DC.creator" content="Niklas Bubeck" />
-  <meta name="DC.subject" content="PyTorch; Generative Imaging; Medical Imaging; Latent Diffusion; Autoencoders; Quantization; Flow Matching" />
+  <meta name="DC.subject" content="PyTorch; Generative Imaging; Medical Imaging; Latent Diffusion; Autoencoders; Quantization; Flow Matching; Diffusion Transformer; DiT; MDT; U-ViT; UNet; LDM; ADM; MaskGIT; MaskBit; MAGE; Muse; MAR; RAR; Fractal; VAR; Taming Transformers; Self-Flow; Gaussian Diffusion; DDPM; DDIM; AutoencoderKL; VQ-VAE; VQ-GAN; LFQ; BSQ; FSQ; QINCo; RQ-VAE; SimVQ; SoftVQ; HCVQ; TiTok; MAETok; VMAE; DeTok; ViTA; DCAE; MedVAE; VA-VAE; BiomedCLIP; DINOv2; MAE" />
   <meta name="DC.description" content="PyTorch library organised around four plug-and-play pieces for generative imaging. Open source, MIT licensed." />
   <meta name="DC.publisher" content="Niklas Bubeck" />
   <meta name="DC.type" content="Software" />
@@ -816,7 +816,20 @@
         "operatingSystem": "Linux, macOS, Windows",
         "applicationCategory": ["DeveloperApplication", "ScientificApplication"],
         "applicationSubCategory": "Machine Learning Library",
-        "keywords": "PyTorch, generative imaging, autoencoder, VAE, VQ-VAE, diffusion, flow matching, self-flow, alignment, DINOv2, MAE, BiomedCLIP, medical imaging, radiology, pathology, latent diffusion, 2D, 3D, denoising scheduler",
+        "keywords": "PyTorch, generative imaging, autoencoder, VAE, AutoencoderKL, VQ-VAE, VQ-GAN, diffusion, Diffusion Transformer, DiT, MDT, U-ViT, UNet, LDM, ADM, DDPM, DDIM, Gaussian Diffusion, flow matching, FlowMatching, self-flow, SelfFlow, MaskGIT, MaskBit, MAGE, Muse, MAR, RAR, Fractal, VAR, Taming Transformers, LFQ, BSQ, FSQ, QINCo, RQ-VAE, SimVQ, SoftVQ, HCVQ, TiTok, MAETok, VMAE, DeTok, ViTA, DCAE, MedVAE, VA-VAE, alignment, DINOv2, MAE, BiomedCLIP, medical imaging, radiology, pathology, latent diffusion, 2D, 3D, denoising scheduler",
+        "featureList": [
+          "Diffusion generators: DiT (Diffusion Transformer), MDT (Masked Diffusion Transformer), U-ViT, UNet (ADM / LDM)",
+          "Masked generators: MaskGIT, MaskBit (LFQBert), MAGE, Muse",
+          "Continuous-autoregressive generators: MAR, RAR, FractalGen",
+          "Discrete-autoregressive / causal generators: Taming GPT, VAR",
+          "Continuous autoencoders: AutoencoderKL (VAE / KL-VAE), VA-VAE, MedVAE, DCAE, MAISI, SoftVQ, WQ-VAE",
+          "Discrete / VQ tokenizers: VQ-VAE, VQ-GAN, LFQ (Lookup-Free Quantization), BSQ (Binary Spherical Quantization), FSQ (Finite Scalar Quantization), QINCo, RQ-VAE, SimVQ, HCVQ, MSRQ, MaskGIT-VQ",
+          "Token-sequence tokenizers: TiTok, MAETok, VMAE, DeTok, ViTA (ReconMAE), SoftVQ tokens",
+          "Denoising schedulers: GaussianDiffusion (DDPM / DDIM with dimension-aware Esser shift), FlowMatching, Self-Flow (DualTimestepScheduler)",
+          "Alignment teachers: DINOv2-L, MAE-L, BiomedCLIP",
+          "GenWrapper — validated glue layer pairing first stage and generator",
+          "Works for both 2D imagery (dims=2) and 3D medical volumes (dims=3)"
+        ],
         "inLanguage": "en",
         "author":     { "@id": "https://github.com/niklasbubeck#person" },
         "creator":    { "@id": "https://github.com/niklasbubeck#person" },
@@ -839,7 +852,7 @@
         "url": "https://github.com/niklasbubeck",
         "sameAs": ["https://github.com/niklasbubeck"],
         "jobTitle": "Researcher",
-        "knowsAbout": ["PyTorch", "generative modeling", "medical imaging", "computer vision", "latent diffusion", "autoencoder", "diffusion model"]
+        "knowsAbout": ["PyTorch", "generative modeling", "medical imaging", "computer vision", "latent diffusion", "autoencoder", "diffusion model", "Diffusion Transformer (DiT)", "Masked Diffusion Transformer (MDT)", "U-ViT", "UNet", "LDM", "ADM", "MaskGIT", "MAR", "RAR", "FractalGen", "Muse", "MAGE", "MaskBit", "VAR", "Taming Transformers", "AutoencoderKL", "VQ-VAE", "VQ-GAN", "LFQ", "BSQ", "FSQ", "QINCo", "RQ-VAE", "SimVQ", "SoftVQ", "TiTok", "MAETok", "VMAE", "DCAE", "MedVAE", "VA-VAE", "Gaussian Diffusion", "DDPM", "DDIM", "Flow Matching", "Rectified Flow", "Self-Flow", "DINOv2", "MAE", "BiomedCLIP"]
       },
       {
         "@type": "WebSite",
@@ -956,6 +969,22 @@
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "Yes. The library supports 2D computer vision use cases equally — the same API handles both 2D images and 3D medical volumes. Use dims=2 for 2D images."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which model architectures are included in MedLat?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "MedLat ships a broad catalog of published architectures behind a single registry. Diffusion generators: DiT (Diffusion Transformer), MDT (Masked Diffusion Transformer), U-ViT, UNet / ADM, LDM. Masked generators: MaskGIT, MAGE, MaskBit (LFQBert), Muse. Continuous-autoregressive: MAR, RAR, FractalGen. Causal / discrete-autoregressive: Taming GPT, VAR. Continuous autoencoders: AutoencoderKL (VAE / KL-VAE), VA-VAE, MedVAE, DCAE, MAISI, SoftVQ, WQ-VAE. Discrete and VQ tokenizers: VQ-VAE, VQ-GAN, LFQ (Lookup-Free Quantization), BSQ (Binary Spherical Quantization), FSQ (Finite Scalar Quantization), QINCo, RQ-VAE, SimVQ, HCVQ, MSRQ. Token-sequence models: TiTok, MAETok, VMAE, DeTok, ViTA (ReconMAE). Denoising schedulers: GaussianDiffusion (DDPM / DDIM with Esser dimension-aware shift), FlowMatching, Self-Flow. Alignment teachers: DINOv2, MAE, BiomedCLIP."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does MedLat include a Diffusion Transformer (DiT) implementation?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. DiT (Diffusion Transformer) is registered under dit.* in sizes s / b / l / xl with patch sizes 1, 2, 4, 8. Sibling diffusion-transformer variants MDT (Masked Diffusion Transformer), U-ViT and self_flow.* are also included. They pair with any continuous autoencoder (AutoencoderKL, VA-VAE, MedVAE, DCAE) via GenWrapper."
             }
           }
         ]
