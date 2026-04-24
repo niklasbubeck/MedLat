@@ -130,40 +130,6 @@ class HOGGenerator(nn.Module):
 
         return self._reshape(self.out)
 
-    def generate_hog_image(self, hog_out: torch.Tensor) -> np.ndarray:
-        """Generate HOG image according to HOG features."""
-        import cv2
-        assert hog_out.size(0) == 1 and hog_out.size(1) == 3, \
-            'Check the input batch size and the channcel number, only support'\
-            '"batch_size = 1".'
-        hog_image = np.zeros([self.h, self.w])
-        cell_gradient = np.array(hog_out.mean(dim=1).squeeze().detach().cpu())
-        cell_width = self.pool / 2
-        max_mag = np.array(cell_gradient).max()
-        angle_gap = 360 / self.nbins
-
-        for x in range(cell_gradient.shape[1]):
-            for y in range(cell_gradient.shape[2]):
-                cell_grad = cell_gradient[:, x, y]
-                cell_grad /= max_mag
-                angle = 0
-                for magnitude in cell_grad:
-                    angle_radian = math.radians(angle)
-                    x1 = int(x * self.pool +
-                             magnitude * cell_width * math.cos(angle_radian))
-                    y1 = int(y * self.pool +
-                             magnitude * cell_width * math.sin(angle_radian))
-                    x2 = int(x * self.pool -
-                             magnitude * cell_width * math.cos(angle_radian))
-                    y2 = int(y * self.pool -
-                             magnitude * cell_width * math.sin(angle_radian))
-                    magnitude = 0 if magnitude < 0 else magnitude
-                    cv2.line(hog_image, (y1, x1), (y2, x2),
-                             int(255 * math.sqrt(magnitude)))
-                    angle += angle_gap
-        return hog_image
-
-
 def mean_flat(x):
     return torch.mean(x, dim=list(range(1, len(x.size()))))
 

@@ -357,7 +357,7 @@ medlat/
 ├── registry.py                  register_model · get_model · available_models · get_model_info · get_model_signature
 ├── utils.py                     init_from_ckpt · validate_compatibility · suggest_generator_params
 ├── first_stage/
-│   ├── continuous/              AEKL · MAISI · MedVAE · VAVAE · DCAE · SoftVQ/WQVAE
+│   ├── continuous/              AEKL · MAISI · MedVAE · VAVAE · DCAE · SoftVQ
 │   ├── discrete/                VQ · RQ · FSQ · LFQ · BSQ · SimVQ · QINCo family · HCVQ · MaskGIT-VQ
 │   │   └── quantizer/           standalone quantizer modules  (discrete.quantizer.*)
 │   └── token/                   TiTok · MAETok · VMAE · DeTok · SoftVQ · ViTA
@@ -437,7 +437,7 @@ Registry IDs follow consistent patterns:
 | **MedVAE** | KL AE + **BiomedCLIP VF alignment** — semantically structured latents for medical images | `continuous.medvae.f8_d16`, `continuous.medvae.f8_d32` | [arXiv](https://arxiv.org/abs/2303.00915) |
 | **VAVAE** | KL AE + **vision-foundation VF alignment** (DINOv2 or MAE) — same idea as VA-VAE paper | `continuous.vavae.f8_d32_dinov2`, `continuous.vavae.f16_d64_mae` | [arXiv](https://arxiv.org/abs/2501.01423) |
 | **DCAE** | EfficientViT DC-AE (high compression ratio) | `continuous.dcae.f32c32`, `continuous.dcae.f128c512` | [arXiv](https://arxiv.org/abs/2410.10733) |
-| **SoftVQ / WQVAE** | Soft or warped quantization, continuous wrapper | `continuous.soft_vq.f8_d16_e16384_dinov2`, `continuous.wqvae.f8_d4_e16384` | [arXiv](https://arxiv.org/abs/2412.10958) |
+| **SoftVQ** | Soft quantization, continuous wrapper | `continuous.soft_vq.f8_d16_e16384_dinov2` | [arXiv](https://arxiv.org/abs/2412.10958) |
 
 ---
 

@@ -114,8 +114,6 @@ class ModulatedLinear(nn.Module):
 
 
 class Attention(nn.Module):
-    _logged = False
-
     def __init__(
         self,
         dim: int,
@@ -138,10 +136,6 @@ class Attention(nn.Module):
         self.scale = self.head_dim**-0.5
         self.is_cross_attn = is_cross_attn
         self.force_causal = force_causal
-
-        self.fused_attn = hasattr(torch.nn.functional, "scaled_dot_product_attention")
-        if self.fused_attn and not Attention._logged:
-            Attention._logged = True
 
         if is_cross_attn:
             self.c_q = nn.Linear(dim, dim, bias=qkv_bias)  # context to q
@@ -192,22 +186,19 @@ class Attention(nn.Module):
             self.k_cache, self.v_cache = k_cache, v_cache
             k, v = k_cache, v_cache
 
-        # Compute attention - use fused attention if available
-        if self.fused_attn:
-            if attn_mask is not None and attn_mask.ndim == 3:
-                # in fused_attn, BHMK as (bs, num_heads, n_ctx, head_dim)
-                attn_mask = attn_mask.unsqueeze(1).expand(-1, self.num_heads, -1, -1)
-            x = F.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                attn_mask=None if self.force_causal else attn_mask,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
-                is_causal=self.force_causal,
-            )
-        else:
-            attn = (q * self.scale) @ k.transpose(-2, -1)
-            x = self.attn_drop(attn.softmax(dim=-1)) @ v
+        # Compute attention via PyTorch SDPA — dispatches to FlashAttention /
+        # memory-efficient / math backends based on hardware and inputs.
+        if attn_mask is not None and attn_mask.ndim == 3:
+            # SDPA expects an attn_mask of shape (B, H, M, N).
+            attn_mask = attn_mask.unsqueeze(1).expand(-1, self.num_heads, -1, -1)
+        x = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None if self.force_causal else attn_mask,
+            dropout_p=self.attn_drop.p if self.training else 0.0,
+            is_causal=self.force_causal,
+        )
 
         # Project output
         return self.proj_drop(self.proj(x.transpose(1, 2).reshape(bs, n_ctx, C)))

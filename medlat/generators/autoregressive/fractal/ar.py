@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 from torch.nn import functional as F
-from .util import visualize_patch
 import math
 
 
@@ -452,8 +451,7 @@ class AR(nn.Module):
 
         return patches, cond_list_next, 0
 
-    def sample(self, cond_list, num_iter, cfg, cfg_schedule, temperature, filter_threshold, next_level_sample_function,
-               visualize=False):
+    def sample(self, cond_list, num_iter, cfg, cfg_schedule, temperature, filter_threshold, next_level_sample_function):
         """ generation """
         if cfg == 1.0:
             bsz = cond_list[0].size(0)
@@ -487,10 +485,6 @@ class AR(nn.Module):
 
             cur_patches[:, step] = sampled_patches.to(cur_patches.dtype)
             patches = cur_patches.clone()
-
-            # visualize generation process for colab
-            if visualize:
-                visualize_patch(self.unpatchify(patches))
 
         # clean up kv cache
         for b in self.blocks:

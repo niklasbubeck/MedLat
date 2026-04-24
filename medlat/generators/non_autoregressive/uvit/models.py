@@ -9,18 +9,6 @@ from medlat.modules.pos_embed import to_ntuple
 import einops
 import torch.utils.checkpoint
 
-if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
-    ATTENTION_MODE = 'flash'
-else:
-    try:
-        import xformers
-        import xformers.ops
-        ATTENTION_MODE = 'xformers'
-    except:
-        ATTENTION_MODE = 'math'
-logging.getLogger(__name__).debug(f'attention mode is {ATTENTION_MODE}')
-
-
 __all__ = ['UViT', 'U_ViT_Small', 'U_ViT_Small_Deep', 'U_ViT_Mid', 'U_ViT_Large', 'U_ViT_Huge']
 
 
@@ -64,27 +52,14 @@ class Attention(nn.Module):
 
     def forward(self, x):
         B, L, C = x.shape
-
         qkv = self.qkv(x)
-        if ATTENTION_MODE == 'flash':
-            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
-            q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
-            x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
-            x = einops.rearrange(x, 'B H L D -> B L (H D)')
-        elif ATTENTION_MODE == 'xformers':
-            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B L H D', K=3, H=self.num_heads)
-            q, k, v = qkv[0], qkv[1], qkv[2]  # B L H D
-            x = xformers.ops.memory_efficient_attention(q, k, v)
-            x = einops.rearrange(x, 'B L H D -> B L (H D)', H=self.num_heads)
-        elif ATTENTION_MODE == 'math':
-            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads)
-            q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
-            attn = (q @ k.transpose(-2, -1)) * self.scale
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            x = (attn @ v).transpose(1, 2).reshape(B, L, C)
-        else:
-            raise NotImplemented
+        qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
+        q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
+        x = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v,
+            dropout_p=self.attn_drop.p if self.training else 0.0,
+        )
+        x = einops.rearrange(x, 'B H L D -> B L (H D)')
 
         x = self.proj(x)
         x = self.proj_drop(x)

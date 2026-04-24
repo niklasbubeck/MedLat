@@ -79,19 +79,15 @@ class ResidualAttentionBlock(nn.Module):
             x = x + self.mlp(self.ln_2(x))
         return x
 
-if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
-    ATTENTION_MODE = 'flash'
-else:
-    try:
-        import xformers
-        import xformers.ops
-        ATTENTION_MODE = 'xformers'
-    except ImportError:
-        ATTENTION_MODE = 'math'
-logging.getLogger(__name__).debug(f'attention mode is {ATTENTION_MODE}')
-
-
 class Attention(nn.Module):
+    """Standard multi-head self-attention via ``F.scaled_dot_product_attention``.
+
+    PyTorch's SDPA dispatches to FlashAttention / memory-efficient / math
+    backends at runtime depending on hardware and inputs, so callers don't
+    need to pick a mode explicitly — this is the single path for both
+    training and inference.
+    """
+
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
         super().__init__()
         self.num_heads = num_heads
@@ -104,27 +100,14 @@ class Attention(nn.Module):
 
     def forward(self, x):
         B, L, C = x.shape
-
         qkv = self.qkv(x)
-        if ATTENTION_MODE == 'flash':
-            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
-            q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
-            x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
-            x = einops.rearrange(x, 'B H L D -> B L (H D)')
-        elif ATTENTION_MODE == 'xformers':
-            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B L H D', K=3, H=self.num_heads)
-            q, k, v = qkv[0], qkv[1], qkv[2]  # B L H D
-            x = xformers.ops.memory_efficient_attention(q, k, v)
-            x = einops.rearrange(x, 'B L H D -> B L (H D)', H=self.num_heads)
-        elif ATTENTION_MODE == 'math':
-            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads)
-            q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
-            attn = (q @ k.transpose(-2, -1)) * self.scale
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            x = (attn @ v).transpose(1, 2).reshape(B, L, C)
-        else:
-            raise NotImplemented
+        qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
+        q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
+        x = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v,
+            dropout_p=self.attn_drop.p if self.training else 0.0,
+        )
+        x = einops.rearrange(x, 'B H L D -> B L (H D)')
 
         x = self.proj(x)
         x = self.proj_drop(x)
@@ -749,7 +732,6 @@ class SimpleMLPAdaLN(nn.Module):
 
 # import torch
 # from einops import rearrange
-# from accelerate.utils.operations import gather
 # from torch.cuda.amp import autocast
 
 class VectorQuantizer(torch.nn.Module):
@@ -777,7 +759,7 @@ class VectorQuantizer(torch.nn.Module):
     # Ensure quantization is performed using f32
     @autocast('cuda', enabled=False)
     def forward(self, z: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
-        from accelerate.utils.operations import gather
+        from medlat.utils import all_gather as gather
         z = z.float()
         z = rearrange(z, 'b c h w -> b h w c').contiguous()
         z_flattened = rearrange(z, 'b h w c -> (b h w) c')

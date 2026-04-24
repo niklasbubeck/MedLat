@@ -4,7 +4,7 @@ from .models import MaskedAutoencoderViT
 __all__ = []
 
 
-@register_model("token.vmae.t_p8_d16", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.t_p8_d16", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_T_P8_D16(**kwargs):
     """Tiny VMAE, patch size 8, latent dim 16 (enc/dec 96d)."""
     return MaskedAutoencoderViT(
@@ -22,7 +22,7 @@ def VMAE_T_P8_D16(**kwargs):
     )
 
 
-@register_model("token.vmae.t_p8_d16_asym", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.t_p8_d16_asym", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_T_P8_D16_ASYM(**kwargs):
     """Tiny-asymmetric VMAE, patch size 8, latent dim 16 (enc 96d, dec 192d)."""
     return MaskedAutoencoderViT(
@@ -40,7 +40,7 @@ def VMAE_T_P8_D16_ASYM(**kwargs):
     )
 
 
-@register_model("token.vmae.s_p8_d32", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.s_p8_d32", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_S_P8_D32(**kwargs):
     """Small VMAE, patch size 8, latent dim 32 (enc/dec 192d)."""
     return MaskedAutoencoderViT(
@@ -58,7 +58,7 @@ def VMAE_S_P8_D32(**kwargs):
     )
 
 
-@register_model("token.vmae.s_p8_d32_flex", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.s_p8_d32_flex", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_S_P8_D32_FLEX(**kwargs):
     """Flexible small VMAE, patch size 8, latent dim 32 (enc/dec 192d)."""
     return MaskedAutoencoderViT(
@@ -76,7 +76,7 @@ def VMAE_S_P8_D32_FLEX(**kwargs):
     )
 
 
-@register_model("token.vmae.s_p8_d16", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.s_p8_d16", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_S_P8_D16(**kwargs):
     """Small VMAE, patch size 8, latent dim 16 (enc 192d, dec 384d, MLP down)."""
     return MaskedAutoencoderViT(
@@ -95,7 +95,7 @@ def VMAE_S_P8_D16(**kwargs):
     )
 
 
-@register_model("token.vmae.s_p8_d16_prev", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.s_p8_d16_prev", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_S_P8_D16_PREV(**kwargs):
     """Previous small VMAE variant, patch size 8, latent dim 16 (enc/dec 192d)."""
     return MaskedAutoencoderViT(
@@ -113,7 +113,7 @@ def VMAE_S_P8_D16_PREV(**kwargs):
     )
 
 
-@register_model("token.vmae.s_p8_d16_flex", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.s_p8_d16_flex", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_S_P8_D16_FLEX(**kwargs):
     """Flexible small VMAE, patch size 8, latent dim 16 (enc 192d, dec 384d, MLP down)."""
     return MaskedAutoencoderViT(
@@ -132,7 +132,7 @@ def VMAE_S_P8_D16_FLEX(**kwargs):
     )
 
 
-@register_model("token.vmae.s_p8_d16_alt", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.s_p8_d16_alt", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_S_P8_D16_ALT(**kwargs):
     """Alternative small VMAE config, patch size 8, latent dim 16 (enc/dec 192d)."""
     return MaskedAutoencoderViT(
@@ -150,7 +150,7 @@ def VMAE_S_P8_D16_ALT(**kwargs):
     )
 
 
-@register_model("token.vmae.b_p8_d16_prev", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.b_p8_d16_prev", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_B_P8_D16_PREV(**kwargs):
     """Base VMAE (previous large variant), patch size 8, latent dim 16 (enc/dec 384d)."""
     return MaskedAutoencoderViT(
@@ -168,7 +168,7 @@ def VMAE_B_P8_D16_PREV(**kwargs):
     )
 
 
-@register_model("token.vmae.s_p16_d32", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.s_p16_d32", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_S_P16_D32(**kwargs):
     """Small VMAE, patch size 16, latent dim 32 (enc/dec 192d)."""
     return MaskedAutoencoderViT(
@@ -186,7 +186,7 @@ def VMAE_S_P16_D32(**kwargs):
     )
 
 
-@register_model("token.vmae.b_p16_d32", paper_url="https://arxiv.org/abs/2510.23606")
+@register_model("token.vmae.b_p16_d32", paper_url="https://arxiv.org/abs/2507.09984")
 def VMAE_B_P16_D32(**kwargs):
     """Base VMAE, patch size 16, latent dim 32 (enc/dec 384d, downsizing at layer 4)."""
     return MaskedAutoencoderViT(

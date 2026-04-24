@@ -42,8 +42,9 @@ class Attend(nn.Module):
         self.attn_dropout = nn.Dropout(dropout)
 
         self.flash = flash
-        from packaging import version
-        assert not (flash and version.parse(torch.__version__) < version.parse('2.0.0')), 'in order to use flash attention, you must be using pytorch 2.0 or above'
+        # MedLat requires torch>=2.0 in pyproject.toml, so SDPA-based flash
+        # attention is always available — no need for a runtime version
+        # assertion.
 
         # determine efficient attention configs for cuda and cpu
 

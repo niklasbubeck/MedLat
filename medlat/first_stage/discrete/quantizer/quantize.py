@@ -60,7 +60,6 @@ __all__ = [
     "QINCo",
     "QincoResidualQuantizer",
     "SoftVectorQuantizer",
-    "WaveletResidualQuantizer",
 ]
 
 
@@ -741,13 +740,13 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
 class ResidualQuantizerBase(AbstractQuantizer, ABC):
     """Base class for quantizers that stack multiple quantization levels.
 
-    Covers :class:`ResidualQuantizer`, :class:`QincoResidualQuantizer`,
-    :class:`MultiScaleResidualQuantizer` (and its 3D variant), and
-    :class:`WaveletResidualQuantizer`. Their ``forward`` return shape differs
-    from single-stage quantizers only in the last slot: ``indices`` is a
-    ``List[Tensor]`` (one entry per residual level) rather than a single
-    ``Tensor``. The ``z_q`` tensor is still the summed/composed result ready
-    for decoding, and the ``loss`` is still a scalar.
+    Covers :class:`ResidualQuantizer`, :class:`QincoResidualQuantizer`, and
+    :class:`MultiScaleResidualQuantizer` (plus its 3D variant). Their
+    ``forward`` return shape differs from single-stage quantizers only in the
+    last slot: ``indices`` is a ``List[Tensor]`` (one entry per residual
+    level) rather than a single ``Tensor``. The ``z_q`` tensor is still the
+    summed/composed result ready for decoding, and the ``loss`` is still a
+    scalar.
 
     Subclasses additionally expose:
 
@@ -2557,139 +2556,3 @@ class SoftVectorQuantizer(AbstractQuantizer):
         
         return z_q, entropy_loss, indices
 
-
-class WaveletResidualQuantizer(ResidualQuantizerBase):
-    def __init__(
-        self,
-        quantizer_class: nn.Module,
-        num_quantizers: int,
-        quantizer_kwargs_list: List[Dict],
-        wavelet: str = 'db1',  # <-- String name only!
-        wavelet_levels: int = 1,
-        shared_codebook: bool = False,
-        quantize_dropout: bool = False,
-        dropout_start_level: int = 0,
-        subbands: Optional[List[str]] = None,
-    ):
-        super().__init__()
-        
-        self.num_quantizers = num_quantizers
-        self.wavelet = wavelet  # Keep as string
-        self.wavelet_levels = wavelet_levels
-        self.quantize_dropout = quantize_dropout
-        self.dropout_start_level = dropout_start_level
-        self.shared_codebook = shared_codebook
-
-        # Fix: wavelet as STRING directly to DWTForward
-        import pytorch_wavelets as ptwt
-        self.dwt = ptwt.DWTForward(J=wavelet_levels, wave=wavelet, mode='zero')
-        self.idwt = ptwt.DWTInverse(wave=wavelet, mode='zero')  # <-- String here too!
-
-        # 4 subbands for 1-level DWT
-        if subbands is None:
-            self.subbands = ['LL', 'LH', 'HL', 'HH']
-        else:
-            self.subbands = subbands
-
-        if num_quantizers != len(self.subbands):
-            raise ValueError(f"num_quantizers {num_quantizers} must match subbands {len(self.subbands)}")
-
-        self.levels = nn.ModuleList([
-            quantizer_class(**quantizer_kwargs_list[i])
-            for i in range(num_quantizers)
-        ])
-
-        if shared_codebook:
-            first = self.levels[0]
-            shared = first.embedding
-            for q in self.levels[1:]:
-                q.embedding = shared
-
-    @property
-    def e_dim(self):
-        return self.levels[0].e_dim
-
-    @property
-    def n_e(self):
-        return self.levels[0].n_e
-
-    def _extract_subbands(self, coeffs) -> List[torch.Tensor]:
-        """Extract subbands BUT preserve pytorch_wavelets format for IDWT."""
-        Yl, Yh = coeffs  # Yl=LL tensor, Yh=(list of scales), each scale=(LH,HL,HH) tensors
-        # For J=1: Yh[0] = [LH, HL, HH] (list of 3 tensors)
-        
-        subband_list = [Yl] + list(Yh[0])  # [LL, LH, HL, HH] for quantization
-        return subband_list
-
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, Tuple]:
-        
-        # 1. DWT decomposition (J=1 for exactly 4 subbands)
-        coeffs = self.dwt(x)
-        Yl, Yh = coeffs
-
-        
-        # 2. Use ONLY first scale for 4 subbands (ignore deeper scales)
-        subbands = [Yl]  # LL
-        if len(Yh) > 0 and len(Yh[0]) == 3:  # LH, HL, HH from scale 0
-            subbands.extend([Yh[0][0], Yh[0][1], Yh[0][2]])
-        else:
-            # Pad with zeros matching LL shape
-            for _ in range(self.num_quantizers - 1):
-                subbands.append(torch.zeros_like(Yl))
-        
-        
-        # 3. Quantization (all subbands now same shape)
-        quantized_outputs = []
-        losses = []
-        all_indices = []
-
-        dropout_level = self.num_quantizers
-        if self.training and self.quantize_dropout and self.num_quantizers > 1:
-            dropout_level = torch.randint(self.dropout_start_level, self.num_quantizers, (1,)).item()
-
-        for i, (q, sb) in enumerate(zip(self.levels, subbands)):
-            if i >= dropout_level:
-                q_out = torch.zeros_like(sb)
-                losses.append(torch.tensor(0.0, device=x.device))
-            else:
-                z_q, loss, indices = q(sb)
-                q_out = z_q
-                losses.append(loss)
-                all_indices.append(indices)
-            
-            quantized_outputs.append(q_out)
-        
-        final_quantized = sum(quantized_outputs)
-        
-        total_loss = sum(losses)
-        
-        return final_quantized, total_loss, all_indices
-    
-    def get_codebook_entry(self, indices, shape=None):
-        # Identical to original RQ-VAE implementation
-        if isinstance(indices, torch.Tensor):
-            B, X = indices.shape
-            Q = self.num_quantizers
-            if X % Q != 0:
-                raise ValueError(f"Total indices {X} not divisible by num_quantizers {Q}")
-            chunk = X // Q
-            indices_list = [indices[:, i * chunk : (i + 1) * chunk] for i in range(Q)]
-        elif isinstance(indices, (list, tuple)):
-            indices_list = list(indices)
-        else:
-            raise TypeError("indices must be Tensor or list/tuple")
-
-        z_q = None
-        for q, idx in zip(self.levels, indices_list):
-            idx = idx.long()
-            if torch.all(idx < 0):
-                continue
-            z_q_i = q.get_codebook_entry(idx)
-            z_q = z_q_i if z_q is None else z_q + z_q_i
-
-        if z_q is None:
-            raise RuntimeError("All quantizer levels were dropped.")
-
-        if shape is not None:
-            z_q = z_q.view(shape)
-        return z_q

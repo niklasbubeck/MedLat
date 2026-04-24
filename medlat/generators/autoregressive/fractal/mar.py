@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
-from .util import visualize_patch
 
 from .pixelloss import PixelLoss
 
@@ -263,8 +262,7 @@ class MAR(nn.Module):
 
         return patches, cond_list_next, guiding_pixel_loss
 
-    def sample(self, cond_list, num_iter, cfg, cfg_schedule, temperature, filter_threshold, next_level_sample_function,
-               visualize=False):
+    def sample(self, cond_list, num_iter, cfg, cfg_schedule, temperature, filter_threshold, next_level_sample_function):
         """ generation """
         if cfg == 1.0:
             bsz = cond_list[0].size(0)
@@ -332,10 +330,6 @@ class MAR(nn.Module):
 
             cur_patches[mask_to_pred.nonzero(as_tuple=True)] = sampled_patches.to(cur_patches.dtype)
             patches = cur_patches.clone()
-
-            # visualize generation process for colab
-            if visualize:
-                visualize_patch(self.unpatchify(patches))
 
         patches = self.unpatchify(patches)
         return patches

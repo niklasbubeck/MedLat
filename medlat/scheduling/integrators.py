@@ -1,7 +1,6 @@
 import numpy as np
 import torch as th
 import torch.nn as nn
-from torchdiffeq import odeint
 from functools import partial
 from tqdm import tqdm
 
@@ -104,6 +103,17 @@ class ode:
         self.sampler_type = sampler_type
 
     def sample(self, x, model, **model_kwargs):
+        # Lazy import — ``torchdiffeq`` is only needed for flow-matching /
+        # ODE sampling paths; users who stick to diffusion schedulers don't
+        # pay the install cost.
+        try:
+            from torchdiffeq import odeint
+        except ImportError as exc:
+            raise ImportError(
+                "Flow-matching ODE sampling requires `torchdiffeq`. "
+                "Install it with `pip install torchdiffeq` or add the "
+                "`[flow]` extra to your MedLat install."
+            ) from exc
 
         device = x[0].device if isinstance(x, tuple) else x.device
         B = x[0].size(0) if isinstance(x, tuple) else x.size(0)

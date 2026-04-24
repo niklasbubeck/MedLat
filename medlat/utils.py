@@ -289,3 +289,27 @@ def instantiate_from_config(config: Mapping[str, Any]) -> Any:
     callable_obj = getattr(module, attr_name)
     kwargs = {k: v for k, v in config.items() if k != "_target_"}
     return callable_obj(**kwargs)
+
+
+def all_gather(tensor: torch.Tensor) -> torch.Tensor:
+    """Concatenate ``tensor`` across all ranks in a distributed run.
+
+    Drop-in replacement for ``accelerate.utils.operations.gather`` using
+    nothing but :mod:`torch.distributed`. When the process group isn't
+    initialised (single-GPU / CPU), the input is returned unchanged — so
+    call sites can invoke this unconditionally without branching on world
+    size.
+
+    The gather concatenates along ``dim=0``; callers that need a
+    per-rank list can use :func:`torch.distributed.all_gather` directly.
+    """
+    import torch.distributed as dist
+
+    if not (dist.is_available() and dist.is_initialized()):
+        return tensor
+    world_size = dist.get_world_size()
+    if world_size == 1:
+        return tensor
+    gathered = [torch.empty_like(tensor) for _ in range(world_size)]
+    dist.all_gather(gathered, tensor.contiguous())
+    return torch.cat(gathered, dim=0)

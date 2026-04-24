@@ -52,7 +52,6 @@ RESIDUAL_CLASSES = [
     "QincoResidualQuantizer",
     "MultiScaleResidualQuantizer",
     "MultiScaleResidualQuantizer3D",
-    "WaveletResidualQuantizer",
 ]
 
 TRANSITIVE_CLASSES = {
