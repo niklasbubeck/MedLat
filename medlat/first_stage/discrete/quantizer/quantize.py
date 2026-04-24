@@ -504,7 +504,7 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
         _z_q, loss, indices = output[0], output[1], output[2]
 
         if isinstance(loss, torch.Tensor) and loss.dim() == 0:
-            self.log_metric("loss", loss.detach())
+            self.log_metric("Loss/quantizer/total_loss", loss.detach())
 
         if isinstance(indices, torch.Tensor):
             # Single-level quantizer — log `perplexity` + update usage buffer.
@@ -545,7 +545,7 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
             if count % self.revive_dead_codes_after == 0:
                 n_revived = self.revive_dead_codes(args[0])
                 if n_revived > 0:
-                    self.log_metric("codes_revived", n_revived)
+                    self.log_metric("Info/quantizer/codes_revived", n_revived)
                 # Roll the usage window: the buffer now represents "hits in
                 # the last `revive_dead_codes_after` forwards". Without this
                 # reset it would be cumulative since creation, letting a code
@@ -673,10 +673,10 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
             temperature=self.entropy_loss_temperature,
             entropy_gamma=self.entropy_gamma,
         )
-        self.log_metric("entropy_per_sample", per_sample.detach())
-        self.log_metric("entropy_avg", avg.detach())
+        self.log_metric("Info/quantizer/entropy_per_sample", per_sample.detach())
+        self.log_metric("Info/quantizer/entropy_avg", avg.detach())
         entropy_loss = self.entropy_loss_weight * (per_sample - avg)
-        self.log_metric("entropy_loss", entropy_loss.detach())
+        self.log_metric("Info/quantizer/entropy_loss", entropy_loss.detach())
         # Stash non-detached components for callers (LFQ / BSQ) that include
         # them in their forward return tuple. Access via ``self._last_entropy_info``.
         self._last_entropy_info = (entropy_loss, per_sample, avg)
