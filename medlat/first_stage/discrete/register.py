@@ -32,6 +32,7 @@ def VQ_f4_d3_e8192(
         use_ema=False,
         ema_decay=0.99,
         ema_eps=1e-5,
+        revive_dead_codes_after=0,
         **kwargs
     ):
     """
@@ -70,7 +71,8 @@ def VQ_f4_d3_e8192(
         beta=beta,
         use_ema=use_ema,
         ema_decay=ema_decay,
-        ema_eps=ema_eps
+        ema_eps=ema_eps,
+        revive_dead_codes_after=revive_dead_codes_after,
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
@@ -100,6 +102,7 @@ def VQ_f8_d4_e16384(
         num_res_blocks=2,
         attn_resolutions=[32],
         dropout=0.0,
+        num_norm_groups=32,
         # --- quantizer config ---
         n_e=16384,
         e_dim=4,
@@ -107,6 +110,7 @@ def VQ_f8_d4_e16384(
         use_ema=False,
         ema_decay=0.99,
         ema_eps=1e-5,
+        revive_dead_codes_after=0,
         **kwargs
     ):
     """
@@ -124,7 +128,8 @@ def VQ_f8_d4_e16384(
         ch_mult=ch_mult,
         num_res_blocks=num_res_blocks,
         attn_resolutions=attn_resolutions,
-        dropout=dropout
+        dropout=dropout,
+        num_groups=num_norm_groups,
     )
     decoder = Decoder(
         img_size=img_size,
@@ -137,7 +142,8 @@ def VQ_f8_d4_e16384(
         ch_mult=ch_mult,
         num_res_blocks=num_res_blocks,
         attn_resolutions=attn_resolutions,
-        dropout=dropout
+        dropout=dropout,
+        num_groups=num_norm_groups,
     )
     quantizer = VectorQuantizer2(
         n_e=n_e,
@@ -145,7 +151,8 @@ def VQ_f8_d4_e16384(
         beta=beta,
         use_ema=use_ema,
         ema_decay=ema_decay,
-        ema_eps=ema_eps
+        ema_eps=ema_eps,
+        revive_dead_codes_after=revive_dead_codes_after,
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
@@ -183,6 +190,7 @@ def VQ_f16_d8_e16384(
         use_ema=False,
         ema_decay=0.99,
         ema_eps=1e-5,
+        revive_dead_codes_after=0,
         **kwargs
     ):
     """
@@ -221,7 +229,8 @@ def VQ_f16_d8_e16384(
         beta=beta,
         use_ema=use_ema,
         ema_decay=ema_decay,
-        ema_eps=ema_eps
+        ema_eps=ema_eps,
+        revive_dead_codes_after=revive_dead_codes_after,
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
@@ -260,6 +269,7 @@ def MaskGITVQ_f16_d256_e1024(
         entropy_loss_ratio=0.1,
         entropy_loss_type="softmax",
         entropy_temperature=0.01,
+        revive_dead_codes_after=0,
         **kwargs
     ):
     encoder = Encoder(
@@ -295,6 +305,7 @@ def MaskGITVQ_f16_d256_e1024(
         entropy_loss_ratio=entropy_loss_ratio,
         entropy_loss_type=entropy_loss_type,
         entropy_temperature=entropy_temperature,
+        revive_dead_codes_after=revive_dead_codes_after,
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
@@ -1056,6 +1067,124 @@ def SimVQ_f16_d8_e16384(
         codebook_transform=codebook_transform,
     )
     return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
+@register_model("discrete.diveq.f4_d3_e8192", paper_url="https://arxiv.org/pdf/2509.26469")
+def DiVeQ_f4_d3_e8192(
+        # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=3,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        n_e=8192,
+        e_dim=3,
+        noise_var=0.001,
+        replacement_iters=100,
+        discard_threshold=0.01,
+        perturb_eps=1e-9,
+        uniform_init=True,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    decoder = Decoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    quantizer = DiVeQ(
+        n_e=n_e, e_dim=e_dim,
+        noise_var=noise_var,
+        replacement_iters=replacement_iters,
+        discard_threshold=discard_threshold,
+        perturb_eps=perturb_eps,
+        uniform_init=uniform_init,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
+@register_model("discrete.diveq.f8_d4_e16384", paper_url="https://arxiv.org/pdf/2509.26469")
+def DiVeQ_f8_d4_e16384(
+        img_size=256, dims=2, double_z=False,
+        z_channels=4, in_channels=3, out_ch=3,
+        ch=128, ch_mult=[1, 2, 2, 4], num_res_blocks=2,
+        attn_resolutions=[32], dropout=0.0,
+        n_e=16384, e_dim=4,
+        noise_var=0.001, replacement_iters=100,
+        discard_threshold=0.01, perturb_eps=1e-9,
+        uniform_init=True,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    decoder = Decoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    quantizer = DiVeQ(
+        n_e=n_e, e_dim=e_dim,
+        noise_var=noise_var,
+        replacement_iters=replacement_iters,
+        discard_threshold=discard_threshold,
+        perturb_eps=perturb_eps,
+        uniform_init=uniform_init,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
+@register_model("discrete.diveq.f16_d8_e16384", paper_url="https://arxiv.org/pdf/2509.26469")
+def DiVeQ_f16_d8_e16384(
+        img_size=256, dims=2, double_z=False,
+        z_channels=8, in_channels=3, out_ch=3,
+        ch=128, ch_mult=[1, 1, 2, 2, 4], num_res_blocks=2,
+        attn_resolutions=[16], dropout=0.0,
+        n_e=16384, e_dim=8,
+        noise_var=0.001, replacement_iters=100,
+        discard_threshold=0.01, perturb_eps=1e-9,
+        uniform_init=True,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    decoder = Decoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    quantizer = DiVeQ(
+        n_e=n_e, e_dim=e_dim,
+        noise_var=noise_var,
+        replacement_iters=replacement_iters,
+        discard_threshold=discard_threshold,
+        perturb_eps=perturb_eps,
+        uniform_init=uniform_init,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
 
 @register_model("discrete.fsq.f4_d3_l8192")
 def FSQ_f4_d3_l8192(

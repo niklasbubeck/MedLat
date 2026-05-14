@@ -9,8 +9,8 @@ Covers:
   own ``get_metrics`` snapshots.
 
 VQ model is not expected to log its own losses — that responsibility lives
-inside the submodules (quantizer publishes ``"loss"`` / ``"perplexity"`` /
-…; alignment publishes ``"alignment_loss"``).
+inside the submodules (quantizer publishes ``"info/quantizer/total_loss"`` /
+``"info/quantizer/perplexity"`` / …; alignment publishes ``"alignment_loss"``).
 """
 from __future__ import annotations
 
@@ -107,14 +107,16 @@ def test_vqmodel_does_not_autolog_alignment_loss_without_alignment():
 
 def test_vqmodel_get_metrics_merges_quantizer_perplexity():
     m = _make_vq_model()
+    # Force the windowed Tier-C metrics to land after a single forward.
+    m.quantizer.usage_window_steps = 1
     m(_tiny_images())
     snap = m.get_metrics()
     # Quantizer publishes these via its own post-forward hook; the model's
     # get_metrics merges them in.
-    assert "perplexity" in snap
-    assert "dead_code_ratio" in snap
-    assert "active_code_count" in snap
-    assert "total_tokens_seen" in snap
+    assert "info/quantizer/perplexity" in snap
+    assert "info/quantizer/dead_code_ratio" in snap
+    assert "info/quantizer/active_code_count" in snap
+    assert "info/quantizer/total_tokens_seen_window" in snap
 
 
 def test_vqmodel_get_metrics_merges_alignment_loss():
@@ -132,18 +134,22 @@ def test_vqmodel_user_metrics_win_over_quantizer_and_alignment():
     m = _make_vq_model()
     m.alignment = _FakeAlignment()
     m(_tiny_images())
-    # After the forward, the quantizer logged "loss"; overwrite at the
-    # model level with a known sentinel.
-    m.log_metric("loss", torch.tensor(-1.0))
-    assert m.get_metrics()["loss"].item() == pytest.approx(-1.0)
+    # After the forward, the quantizer logged the loss under
+    # ``info/quantizer/total_loss``; overwriting that exact key at the
+    # model level wins via setdefault precedence.
+    m.log_metric("info/quantizer/total_loss", torch.tensor(-1.0))
+    assert (
+        m.get_metrics()["info/quantizer/total_loss"].item()
+        == pytest.approx(-1.0)
+    )
 
 
 def test_vqmodel_metrics_update_on_every_forward():
     m = _make_vq_model()
     m(_tiny_images(n=2))
-    first_perp = m.get_metrics()["perplexity"].clone()
+    first_perp = m.get_metrics()["info/quantizer/perplexity"].clone()
     m(_tiny_images(n=4))
-    second_perp = m.get_metrics()["perplexity"]
+    second_perp = m.get_metrics()["info/quantizer/perplexity"]
     # Different batches → quantizer recomputes perplexity from indices on the
     # latest call. The key property is that the stored tensor is the newest
     # one (not a buffered aggregate).

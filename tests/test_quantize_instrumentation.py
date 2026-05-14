@@ -71,10 +71,10 @@ def test_forward_auto_logs_loss_and_perplexity():
     with torch.no_grad():
         m(x)
     snap = m.get_metrics()
-    assert "loss" in snap
-    assert "perplexity" in snap
-    assert isinstance(snap["loss"], torch.Tensor)
-    assert isinstance(snap["perplexity"], torch.Tensor)
+    assert "info/quantizer/total_loss" in snap
+    assert "info/quantizer/perplexity" in snap
+    assert isinstance(snap["info/quantizer/total_loss"], torch.Tensor)
+    assert isinstance(snap["info/quantizer/perplexity"], torch.Tensor)
 
 
 def test_forward_auto_logged_values_update_on_each_call():
@@ -83,10 +83,10 @@ def test_forward_auto_logged_values_update_on_each_call():
     x2 = torch.randn(2, 4, 3, 3, generator=torch.Generator().manual_seed(1))
     with torch.no_grad():
         m(x1)
-    perp1 = m.get_metrics()["perplexity"].clone()
+    perp1 = m.get_metrics()["info/quantizer/perplexity"].clone()
     with torch.no_grad():
         m(x2)
-    perp2 = m.get_metrics()["perplexity"]
+    perp2 = m.get_metrics()["info/quantizer/perplexity"]
     # Values can differ between calls; the important property is that we
     # overwrote (i.e. the stored tensor is the latest one).
     assert perp1.data_ptr() != perp2.data_ptr() or torch.equal(perp1, perp2)
@@ -104,7 +104,7 @@ def test_hook_is_defensive_against_nonstandard_return_shapes():
     m._post_forward(torch.zeros(1))
     # indices is None — should silently skip but still log loss.
     m._post_forward((torch.zeros(1), torch.tensor(0.5), None))
-    assert m.get_metrics()["loss"].item() == pytest.approx(0.5)
+    assert m.get_metrics()["info/quantizer/total_loss"].item() == pytest.approx(0.5)
     # indices is a list (residual variants emit a per-level list) — must not
     # attempt to treat the list as a Tensor.
     m._post_forward(
@@ -115,7 +115,7 @@ def test_hook_is_defensive_against_nonstandard_return_shapes():
         )
     )
     # loss overwritten with the latest value.
-    assert m.get_metrics()["loss"].item() == pytest.approx(0.7)
+    assert m.get_metrics()["info/quantizer/total_loss"].item() == pytest.approx(0.7)
     # 4-tuple (Gumbel return_logits=True shape) — hook only reads the first
     # three elements, ignoring the extra logits tensor.
     m._post_forward(
@@ -127,10 +127,10 @@ def test_hook_is_defensive_against_nonstandard_return_shapes():
         )
     )
     snap = m.get_metrics()
-    assert snap["loss"].item() == pytest.approx(0.9)
+    assert snap["info/quantizer/total_loss"].item() == pytest.approx(0.9)
     # Perplexity is now derived from indices via bincount, so a fully-used
     # codebook (each code hit once) gives perplexity == n_e.
-    assert snap["perplexity"].item() == pytest.approx(4.0)
+    assert snap["info/quantizer/perplexity"].item() == pytest.approx(4.0)
 
 
 # ---------------------------------------------------------------------------
@@ -166,13 +166,17 @@ def test_usage_buffer_accumulates_across_forward_calls():
 
 
 def test_total_tokens_seen_equals_indices_per_call():
-    # batch 2 × 3 × 3 spatial = 18 tokens per forward.
-    m = qn.VectorQuantizer(n_e=8, e_dim=4, beta=0.25).eval()
+    # Window-closed semantics: with ``usage_window_steps=1`` the window
+    # closes after every forward, so ``total_tokens_seen_window`` reflects
+    # the index count of the most recent forward — batch 2 × 3 × 3 = 18.
+    m = qn.VectorQuantizer(
+        n_e=8, e_dim=4, beta=0.25, usage_window_steps=1
+    ).eval()
     x = torch.randn(2, 4, 3, 3, generator=torch.Generator().manual_seed(0))
     with torch.no_grad():
         m(x)
     snap = m.get_metrics()
-    assert snap["total_tokens_seen"] == 2 * 3 * 3
+    assert snap["info/quantizer/total_tokens_seen_window"] == 2 * 3 * 3
 
 
 def test_track_usage_false_skips_buffer():
@@ -183,30 +187,35 @@ def test_track_usage_false_skips_buffer():
         m(torch.randn(1, 4, 2, 2))
     assert not hasattr(m, "_usage_buffer")
     # But other instrumentation still works.
-    assert "loss" in m.get_metrics()
+    assert "info/quantizer/total_loss" in m.get_metrics()
 
 
 def test_dead_code_ratio_decreases_with_more_diverse_input():
     # With only 4 tokens total and a codebook of 16, at most 4 codes are hit —
-    # so the majority of codes are dead.
-    m = qn.VectorQuantizer(n_e=16, e_dim=4, beta=0.25).eval()
+    # so the majority of codes are dead. Force the snapshot to land after
+    # the single forward by closing the window every step.
+    m = qn.VectorQuantizer(
+        n_e=16, e_dim=4, beta=0.25, usage_window_steps=1
+    ).eval()
     with torch.no_grad():
         m(torch.randn(1, 4, 2, 2, generator=torch.Generator().manual_seed(0)))
     snap = m.get_metrics()
-    assert snap["active_code_count"] <= 4
-    assert snap["dead_code_ratio"] >= 12 / 16
+    assert snap["info/quantizer/active_code_count"] <= 4
+    assert snap["info/quantizer/dead_code_ratio"] >= 12 / 16
 
 
 def test_dead_code_ratio_is_zero_when_all_codes_hit():
-    # Force every code to be hit by manually seeding the usage buffer.
+    # Force every code to be hit by manually seeding the usage buffer, then
+    # invoke the snapshot machinery directly. Bypassing the cadence is the
+    # cleanest way to test the snapshot function in isolation.
     m = qn.VectorQuantizer(n_e=8, e_dim=4, beta=0.25).eval()
-    # Run one forward to allocate the buffer on the right device.
     with torch.no_grad():
         m(torch.randn(1, 4, 2, 2))
     m._usage_buffer.fill_(100)
+    m._snapshot_window_metrics()
     snap = m.get_metrics()
-    assert snap["dead_code_ratio"] == 0.0
-    assert snap["codebook_utilization"] == 1.0
+    assert snap["info/quantizer/dead_code_ratio"] == 0.0
+    assert snap["info/quantizer/codebook_utilization"] == 1.0
 
 
 def test_instrumentation_kwargs_accepted_at_construction():
@@ -275,11 +284,11 @@ def test_residual_quantizer_logs_per_level_perplexity():
     with torch.no_grad():
         r(x)
     snap = r.get_metrics()
-    assert "perplexity_level_0" in snap
-    assert "perplexity_level_1" in snap
-    assert "perplexity_level_2" in snap
+    assert "info/quantizer/perplexity_level_0" in snap
+    assert "info/quantizer/perplexity_level_1" in snap
+    assert "info/quantizer/perplexity_level_2" in snap
     # Aggregated 'perplexity' key is reserved for single-level quantizers.
-    assert "perplexity" not in snap
+    assert "info/quantizer/perplexity" not in snap
 
 
 def test_residual_quantizer_list_indices_do_not_crash_hook():
@@ -393,7 +402,7 @@ def test_auto_revive_disabled_by_default():
             m(torch.randn(1, 4, 2, 2))
     # No auto-revival counter spun up, no codes_revived metric logged.
     assert not hasattr(m, "_forward_count")
-    assert "codes_revived" not in m.get_metrics()
+    assert "info/quantizer/codes_revived" not in m.get_metrics()
 
 
 def test_auto_revive_fires_on_configured_cadence():
@@ -415,45 +424,42 @@ def test_auto_revive_fires_on_configured_cadence():
     # No codes_revived metric yet because revival hasn't fired this batch.
     # (The counter may have re-populated some entries in the buffer though,
     # so we don't assert it's still all-zero — only that revival hasn't run.)
-    assert "codes_revived" not in m.get_metrics()
+    assert "info/quantizer/codes_revived" not in m.get_metrics()
 
     # Zero again to guarantee dead codes when the cadence hits.
     m._usage_buffer.fill_(0)
     m(torch.randn(2, 4, 2, 2, generator=torch.Generator().manual_seed(2)))
     assert m._forward_count == 3
     # Revival ran — codes_revived metric should show up.
-    assert "codes_revived" in m.get_metrics()
-    assert m.get_metrics()["codes_revived"] > 0
+    assert "info/quantizer/codes_revived" in m.get_metrics()
+    assert m.get_metrics()["info/quantizer/codes_revived"] > 0
 
 
-def test_auto_revive_rolls_the_usage_window():
-    # With revive_dead_codes_after=N, the usage buffer should represent hits
-    # in the LAST N forwards, not lifetime cumulative counts. Verified by
-    # checking that the buffer is zeroed right after each revival tick.
+def test_auto_revive_does_not_reset_buffer():
+    # Buffer-reset cadence is now owned exclusively by ``usage_window_steps``
+    # (the Tier-C snapshot machinery). Revival fires on its own counter and
+    # reads whatever rolling-window state the buffer currently holds; it
+    # must NOT zero the buffer itself or the snapshot semantics drift.
     torch.manual_seed(0)
     m = qn.VectorQuantizer(
         n_e=8, e_dim=4, beta=0.25,
         revive_dead_codes_after=3,
+        usage_window_steps=10_000,  # window won't close during this test
     ).train()
 
-    # Forwards 1 and 2: buffer accumulates, no revival.
     m(torch.randn(2, 4, 2, 2, generator=torch.Generator().manual_seed(1)))
-    assert int(m._usage_buffer.sum().item()) > 0, "buffer accumulating mid-window"
     m(torch.randn(2, 4, 2, 2, generator=torch.Generator().manual_seed(2)))
     pre_revival_total = int(m._usage_buffer.sum().item())
     assert pre_revival_total > 0
 
-    # Forward 3: revival fires, THEN buffer is reset for the next window.
+    # Forward 3: revival fires, but the buffer continues to accumulate.
     m(torch.randn(2, 4, 2, 2, generator=torch.Generator().manual_seed(3)))
     assert m._forward_count == 3
-    assert int(m._usage_buffer.sum().item()) == 0, (
-        "buffer must reset after each revival so the next revival uses "
-        "recent-window data, not lifetime cumulative counts"
+    post_revival_total = int(m._usage_buffer.sum().item())
+    assert post_revival_total > pre_revival_total, (
+        "revival must not reset the usage buffer — the window cadence "
+        "(usage_window_steps) is the only thing that resets it now"
     )
-
-    # Forward 4 fills the new window.
-    m(torch.randn(2, 4, 2, 2, generator=torch.Generator().manual_seed(4)))
-    assert int(m._usage_buffer.sum().item()) > 0, "window refilling after reset"
 
 
 def test_auto_revive_skipped_in_eval_mode():
@@ -473,7 +479,7 @@ def test_auto_revive_skipped_for_codebook_free_classes():
     m.revive_dead_codes_after = 1
     m(torch.randn(1, 4, 2, 2))
     # No codes_revived metric because revive_dead_codes returned 0.
-    assert "codes_revived" not in m.get_metrics()
+    assert "info/quantizer/codes_revived" not in m.get_metrics()
 
 
 def test_revive_accepts_any_shape_with_matching_trailing_dim():
@@ -543,7 +549,7 @@ def test_entropy_regularization_returns_zero_in_eval_mode():
     out = m.entropy_regularization(affinity)
     assert out.item() == 0.0
     # And nothing should be logged.
-    assert "entropy_per_sample" not in m.get_metrics()
+    assert "info/quantizer/entropy_per_sample" not in m.get_metrics()
 
 
 def test_entropy_regularization_does_not_mutate_affinity():
@@ -566,13 +572,13 @@ def test_entropy_regularization_logs_components_as_metrics():
     m.entropy_regularization(affinity)
 
     snap = m.get_metrics()
-    assert "entropy_per_sample" in snap
-    assert "entropy_avg" in snap
-    assert "entropy_loss" in snap
+    assert "info/quantizer/entropy_per_sample" in snap
+    assert "info/quantizer/entropy_avg" in snap
+    assert "info/quantizer/entropy_loss" in snap
     # Values are detached (no grad graph).
-    assert snap["entropy_per_sample"].grad_fn is None
-    assert snap["entropy_avg"].grad_fn is None
-    assert snap["entropy_loss"].grad_fn is None
+    assert snap["info/quantizer/entropy_per_sample"].grad_fn is None
+    assert snap["info/quantizer/entropy_avg"].grad_fn is None
+    assert snap["info/quantizer/entropy_loss"].grad_fn is None
 
 
 def test_entropy_regularization_does_not_log_when_disabled():
@@ -581,8 +587,8 @@ def test_entropy_regularization_does_not_log_when_disabled():
     affinity = torch.randn(6, 8)
     m.entropy_regularization(affinity)
     snap = m.get_metrics()
-    assert "entropy_per_sample" not in snap
-    assert "entropy_avg" not in snap
+    assert "info/quantizer/entropy_per_sample" not in snap
+    assert "info/quantizer/entropy_avg" not in snap
 
 
 def test_entropy_regularization_accepts_affinity_of_arbitrary_batch_shape():
@@ -647,13 +653,13 @@ def test_vq2_entropy_contributes_to_loss_in_training_mode():
     _, loss, _ = m(x)
     # With entropy reg on, the per/avg/entropy metrics should be populated.
     snap = m.get_metrics()
-    assert "entropy_per_sample" in snap
-    assert "entropy_avg" in snap
-    assert "entropy_loss" in snap
+    assert "info/quantizer/entropy_per_sample" in snap
+    assert "info/quantizer/entropy_avg" in snap
+    assert "info/quantizer/entropy_loss" in snap
     # And the logged entropy_loss must equal the term actually added to loss
     # (we can't observe the unregularized loss in isolation, but we can check
     # the published value is non-zero).
-    assert snap["entropy_loss"].item() != 0.0
+    assert snap["info/quantizer/entropy_loss"].item() != 0.0
 
 
 def test_vq2_entropy_is_zero_in_eval_even_when_weight_positive():
@@ -663,7 +669,7 @@ def test_vq2_entropy_is_zero_in_eval_even_when_weight_positive():
         m(x)
     snap = m.get_metrics()
     # training-mode gate means no entropy metrics are populated in eval.
-    assert "entropy_per_sample" not in snap
+    assert "info/quantizer/entropy_per_sample" not in snap
 
 
 def test_vq2_clone_with_preserves_migrated_entropy_config():

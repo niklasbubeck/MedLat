@@ -19,6 +19,7 @@ Four shared numerical helpers back the concrete forwards:
 import logging
 import math
 import random
+import warnings
 from abc import ABC, abstractmethod
 from functools import partial, wraps
 from itertools import zip_longest
@@ -60,6 +61,7 @@ __all__ = [
     "QINCo",
     "QincoResidualQuantizer",
     "SoftVectorQuantizer",
+    "DiVeQ",
 ]
 
 
@@ -328,12 +330,23 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
     #: the training loop. Requires a learnable ``nn.Embedding`` codebook and
     #: a populated usage buffer (i.e. at least one prior forward pass).
     #:
-    #: When auto-revival is enabled, :attr:`_usage_buffer` is also reset
-    #: after every revival tick so the *next* decision is based on the
-    #: coming N forwards rather than lifetime cumulative counts. This turns
-    #: the buffer into a rolling window of length ``revive_dead_codes_after``
-    #: for dead-code purposes. Disabled (``0``) keeps the buffer cumulative.
+    #: Buffer-reset semantics: revival no longer resets ``_usage_buffer``.
+    #: The buffer is owned exclusively by the windowed-snapshot machinery
+    #: (see :attr:`usage_window_steps`), so revival simply reads whichever
+    #: rolling-window state is current when it fires.
     revive_dead_codes_after: int = 0
+
+    #: number of forward passes per usage-snapshot window. At every Nth
+    #: forward the codebook-usage distribution metrics (``info/quantizer/
+    #: usage_entropy_norm``, ``..._gini``, ``..._dead_code_ratio``, etc.) are
+    #: computed from :attr:`_usage_buffer`, written via :meth:`log_metric`,
+    #: and the buffer is then zeroed so the next window starts fresh. The
+    #: previous snapshot's values stay in :attr:`_metrics` for the entire
+    #: next window — :class:`~medlat.modules.metrics.MetricLoggerMixin` keeps
+    #: latest values until something overwrites them, so loggers see a flat
+    #: held value between window closes rather than ramping numbers from a
+    #: partially-filled buffer.
+    usage_window_steps: int = 1000
 
     #: Instrumentation kwargs that every subclass ``__init__`` implicitly
     #: accepts — :meth:`__init_subclass__` wraps each concrete ``__init__`` to
@@ -342,13 +355,15 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
     #: finishes. Users can therefore pass any of them at instantiation time::
     #:
     #:     m = get_model("discrete.quantizer.vector_quantizer",
-    #:                   n_e=1024, e_dim=8, revive_dead_codes_after=1000)
+    #:                   n_e=1024, e_dim=8, revive_dead_codes_after=1000,
+    #:                   usage_window_steps=500)
     #:
     #: without the underlying factory's signature having to declare them.
     _INSTRUMENTATION_KWARGS = (
         "track_usage",
         "dead_code_threshold",
         "revive_dead_codes_after",
+        "usage_window_steps",
     )
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -433,41 +448,25 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
         )
 
     # ------------------------------------------------------------------
-    # Metric logger — ``log_metric``, ``reset_metrics`` inherited from
-    # :class:`MetricLoggerMixin`. Only ``get_metrics`` is overridden so it
-    # can add codebook-usage-derived fields on top of the base snapshot.
+    # Metric logger — ``log_metric``, ``get_metrics``, ``reset_metrics``
+    # inherited from :class:`MetricLoggerMixin`. All quantizer-side metrics
+    # (Tier-A per-batch fidelity, Tier-B codebook-state geometry, Tier-C
+    # windowed usage-distribution snapshots) flow through ``log_metric``
+    # under the ``info/quantizer/`` prefix. Tier-C snapshots persist in
+    # ``_metrics`` between window closes thanks to latest-value semantics.
     # ------------------------------------------------------------------
 
-    def get_metrics(self) -> Dict[str, Any]:
-        """Latest logged metrics + codebook-usage derived stats.
-
-        Base :meth:`~MetricLoggerMixin.get_metrics` returns anything set via
-        :meth:`log_metric` (including automatic ``"loss"`` / ``"perplexity"``
-        from :meth:`_post_forward`). On top of that, if :attr:`track_usage`
-        is on and at least one forward has run, four derived fields are
-        included:
-
-        * ``active_code_count`` — codes whose cumulative hit count meets
-          :attr:`dead_code_threshold`.
-        * ``dead_code_ratio`` — fraction of codes below the threshold.
-        * ``codebook_utilization`` — alias for ``1 - dead_code_ratio``.
-        * ``total_tokens_seen`` — sum of all hits so far.
-        """
-        snap = super().get_metrics()
-        if hasattr(self, "_usage_buffer"):
-            usage = self._usage_buffer
-            alive = int((usage >= self.dead_code_threshold).sum().item())
-            total = int(usage.numel())
-            snap["active_code_count"] = alive
-            snap["dead_code_ratio"] = 1.0 - alive / total if total > 0 else 0.0
-            snap["codebook_utilization"] = alive / total if total > 0 else 0.0
-            snap["total_tokens_seen"] = int(usage.sum().item())
-        return snap
-
     def reset_usage(self) -> None:
-        """Zero the codebook usage buffer."""
+        """Zero the codebook usage buffer (single-level + per-level)."""
         if hasattr(self, "_usage_buffer"):
             self._usage_buffer.zero_()
+        for buf in self._iter_level_usage_buffers():
+            buf.zero_()
+
+    def _iter_level_usage_buffers(self) -> List[torch.Tensor]:
+        """Return per-level usage buffers in level order, or ``[]`` if none."""
+        n = getattr(self, "_n_level_usage_buffers", 0)
+        return [getattr(self, f"_level_usage_buffer_{i}") for i in range(n)]
 
     # ------------------------------------------------------------------
     # Post-forward hook — extracts indices for auto-logging.
@@ -486,39 +485,64 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
         per-level ``Tensor``s (residual variants), or ``None``. An optional
         trailing element (Gumbel's ``return_logits=True`` 4-tuple) is ignored.
 
-        Responsibilities:
+        Three tiers of metrics are populated under the ``info/quantizer/``
+        prefix:
 
-        * Populate ``loss`` and ``perplexity`` in the metric dict.
-        * Update the codebook usage buffer when ``indices`` is a ``Tensor``.
-        * When :attr:`revive_dead_codes_after` is set, auto-call
-          :meth:`revive_dead_codes` every N forward passes during training,
-          passing the first positional ``forward`` argument as the encoder
-          activation pool.
+        * **Tier A — per-batch, exact.** Quantization-error (mean / p99 /
+          cosine), encoder-norm summary, encoder-to-codebook norm ratio,
+          per-sample unique-code diversity, single-step perplexity. Computed
+          on every forward.
+        * **Tier B — codebook-state geometry.** Codebook entry-norm summary,
+          stable rank, and step-to-step update norm. Only emitted for
+          quantizers that expose a tensor codebook via ``self.embedding``;
+          codebook-free LFQ/BSQ/FSQ are skipped.
+        * **Tier C — windowed usage distribution.** Every
+          :attr:`usage_window_steps` forwards (default 1000) the cumulative
+          ``_usage_buffer`` is summarised into ``usage_entropy_norm``,
+          ``usage_kl_to_uniform``, ``usage_gini``, ``top1_share``,
+          ``top1pct_share``, ``active_code_count``, ``dead_code_ratio``,
+          ``codebook_utilization``, ``total_tokens_seen_window``. The buffer
+          is then zeroed; the snapshot persists in :attr:`_metrics` for the
+          full next window via the mixin's latest-value semantics.
+
+        Auto-revival (when :attr:`revive_dead_codes_after` > 0) fires on its
+        own counter and reads whatever rolling-window usage state the buffer
+        currently holds — it no longer resets the buffer itself.
 
         ``args`` is the positional arg tuple that the wrapped forward was
-        called with — we need ``args[0]`` (typically ``z``) for auto-revival.
+        called with — we need ``args[0]`` (typically ``z``) for auto-revival
+        and Tier-A encoder-side metrics.
         """
         if not isinstance(output, tuple) or len(output) < 3:
             return
-        _z_q, loss, indices = output[0], output[1], output[2]
+        z_q, loss, indices = output[0], output[1], output[2]
 
         if isinstance(loss, torch.Tensor) and loss.dim() == 0:
-            self.log_metric("Loss/quantizer/total_loss", loss.detach())
+            self.log_metric("info/quantizer/total_loss", loss.detach())
+
+        # ── Tier A: per-batch fidelity / encoder-side metrics ─────────────
+        z = args[0] if args else None
+        if isinstance(z, torch.Tensor) and isinstance(z_q, torch.Tensor):
+            self._log_tier_a_per_batch(z, z_q)
 
         if isinstance(indices, torch.Tensor):
             # Single-level quantizer — log `perplexity` + update usage buffer.
-            self._log_perplexity_from_indices(indices, self._n_e_safe(), "perplexity")
+            self._log_perplexity_from_indices(
+                indices, self._n_e_safe(), "info/quantizer/perplexity"
+            )
+            self._log_unique_codes_per_sample(indices, "info/quantizer/")
             if self.track_usage:
                 self._update_usage(indices)
         elif isinstance(indices, (list, tuple)):
-            # Residual / multi-level — per-level perplexity under
-            # `perplexity_level_{i}`. Codebook size is looked up per level
-            # when a ``self.levels`` module list is available, otherwise the
-            # wrapper's ``n_e`` is reused (common for shared-codebook variants).
+            # Residual / multi-level — per-level perplexity, per-sample
+            # diversity, and per-level usage buffers (so Tier-C snapshots
+            # have a per-level histogram to summarise at window close).
             levels = getattr(self, "levels", None)
             fallback_n_e = self._n_e_safe()
+            level_n_es: List[int] = []
             for i, level_idx in enumerate(indices):
                 if not isinstance(level_idx, torch.Tensor):
+                    level_n_es.append(0)
                     continue
                 level_n_e = fallback_n_e
                 if levels is not None:
@@ -526,31 +550,47 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
                         level_n_e = int(levels[i].n_e)
                     except (AttributeError, IndexError, TypeError):
                         pass
+                level_n_es.append(level_n_e)
                 self._log_perplexity_from_indices(
-                    level_idx, level_n_e, f"perplexity_level_{i}"
+                    level_idx, level_n_e, f"info/quantizer/perplexity_level_{i}"
                 )
+                self._log_unique_codes_per_sample(
+                    level_idx, f"info/quantizer/", suffix=f"_level_{i}"
+                )
+            if self.track_usage:
+                self._update_level_usage(indices, level_n_es)
+
+        # ── Tier B: codebook-state geometry (skipped for LFQ/BSQ/FSQ) ─────
+        self._log_tier_b_codebook_state()
+
+        # ── Tier C: windowed usage-distribution snapshot ──────────────────
+        # Counter advances on every forward, regardless of train/eval, so
+        # the snapshot cadence is predictable. ``track_usage = False`` opts
+        # out completely (some very-large-codebook configs don't allocate
+        # the buffer).
+        if self.track_usage:
+            count = getattr(self, "_window_step_count", 0) + 1
+            self._window_step_count = count
+            if count >= max(1, int(self.usage_window_steps)):
+                self._snapshot_window_metrics()
+                self.reset_usage()
+                self._window_step_count = 0
 
         # ── Auto-revive dead codes on a fixed cadence ─────────────────────
+        # Independent counter from the window cadence. Reads whichever
+        # rolling-window usage state the buffer currently holds.
         if (
             self.revive_dead_codes_after > 0
             and self.training
             and args
             and isinstance(args[0], torch.Tensor)
         ):
-            # Lazily create the counter on first use so existing models that
-            # don't set revive_dead_codes_after don't carry a stale counter.
             count = getattr(self, "_forward_count", 0) + 1
             self._forward_count = count
             if count % self.revive_dead_codes_after == 0:
                 n_revived = self.revive_dead_codes(args[0])
                 if n_revived > 0:
-                    self.log_metric("Info/quantizer/codes_revived", n_revived)
-                # Roll the usage window: the buffer now represents "hits in
-                # the last `revive_dead_codes_after` forwards". Without this
-                # reset it would be cumulative since creation, letting a code
-                # hit once on step 5 stay "alive" forever — which is usually
-                # not what users want when configuring periodic revival.
-                self.reset_usage()
+                    self.log_metric("info/quantizer/codes_revived", n_revived)
 
     def _n_e_safe(self) -> int:
         """Best-effort int read of ``self.n_e``; returns 0 if unavailable."""
@@ -608,6 +648,340 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
         self._usage_buffer.scatter_add_(
             0, flat, torch.ones_like(flat, dtype=self._usage_buffer.dtype)
         )
+
+    def _update_level_usage(
+        self, indices: Sequence[Any], level_n_es: List[int]
+    ) -> None:
+        """Increment per-level usage buffers for residual / multi-level quantizers.
+
+        Lazily registers ``_level_usage_buffer_{i}`` on first call (one per
+        level) and remembers how many it created in
+        ``_n_level_usage_buffers`` so :meth:`_iter_level_usage_buffers` can
+        find them later. Levels that report ``n_e <= 0`` or whose entry
+        isn't a tensor (e.g. dropped levels in residual training) are
+        skipped without disturbing the others.
+        """
+        if not hasattr(self, "_n_level_usage_buffers"):
+            self._n_level_usage_buffers = 0
+
+        for i, level_idx in enumerate(indices):
+            if not isinstance(level_idx, torch.Tensor):
+                continue
+            n_e = level_n_es[i] if i < len(level_n_es) else 0
+            if n_e <= 0:
+                continue
+            flat = level_idx.detach().flatten().long()
+            if flat.numel() == 0:
+                continue
+
+            buf_name = f"_level_usage_buffer_{i}"
+            if not hasattr(self, buf_name):
+                self.register_buffer(
+                    buf_name,
+                    torch.zeros(n_e, dtype=torch.int64, device=flat.device),
+                    persistent=False,
+                )
+                # Track the highest-index level we've allocated for so the
+                # iterator helper picks them up in level order regardless of
+                # which level happened to fire first.
+                self._n_level_usage_buffers = max(
+                    self._n_level_usage_buffers, i + 1
+                )
+
+            buf = getattr(self, buf_name)
+            flat = flat.clamp(0, n_e - 1)
+            buf.scatter_add_(
+                0, flat, torch.ones_like(flat, dtype=buf.dtype)
+            )
+
+    def _log_unique_codes_per_sample(
+        self,
+        indices: torch.Tensor,
+        prefix: str,
+        suffix: str = "",
+    ) -> None:
+        """Mean number of distinct code indices used inside one sample.
+
+        ``indices[0]`` is taken as the batch dim. A 0/1-D tensor falls back
+        to a single global count so callers don't need to special-case it.
+        """
+        idx = indices.detach()
+        if idx.ndim == 0:
+            return
+        if idx.ndim == 1:
+            uniq = float(torch.unique(idx).numel())
+        else:
+            B = idx.shape[0]
+            flat = idx.reshape(B, -1)
+            counts = [torch.unique(row).numel() for row in flat]
+            uniq = sum(counts) / max(1, len(counts))
+        self.log_metric(f"{prefix}unique_codes_per_sample{suffix}", float(uniq))
+
+    # ------------------------------------------------------------------
+    # Direction-only spread on the unit sphere (used by Tier A and B).
+    # ------------------------------------------------------------------
+
+    @torch.no_grad()
+    def _log_directional_spread(
+        self, X: torch.Tensor, prefix: str
+    ) -> None:
+        """Log how rows of ``X`` are spread on the unit sphere.
+
+        Direction-only diagnostics that complement the magnitude-only
+        norms in Tier A/B. All operations are O(n·d): the mean
+        off-diagonal cosine uses the sum trick
+        ``Σᵢⱼ <xᵢ,xⱼ> = ‖Σᵢ xᵢ‖²``, and the singular spectrum of the
+        row-normalized matrix is cheap because ``d ≪ n`` everywhere
+        this is called (codebook ``d ≤ 32`` and encoder activations
+        flattened to ``(N, d)``).
+
+        Uniform points on S^{d-1} → ``mean_cos ≈ 0``, ``sv_ratio ≈ 1``,
+        ``effective_dim ≈ d``. Concentration in a cone pushes
+        ``mean_cos`` toward 1, ``sv_ratio`` upward, and
+        ``effective_dim`` toward 1.
+
+        Metric keys (under ``prefix``):
+          * ``mean_cos``       — average off-diagonal cosine similarity
+          * ``sv_ratio``       — σ_max / σ_min of the row-normalized matrix
+          * ``effective_dim``  — exp of the entropy of normalized σ_i²
+                                 (a smooth analogue of stable rank)
+        """
+        if X.ndim != 2 or X.shape[0] < 2 or X.shape[1] < 2:
+            return
+        Xn = F.normalize(X.detach().float(), dim=-1)
+        n, d = Xn.shape
+
+        total = Xn.sum(dim=0).pow(2).sum()
+        denom = float(n * (n - 1))
+        mean_cos = (total - n) / max(denom, 1.0)
+        self.log_metric(f"{prefix}mean_cos", mean_cos)
+
+        try:
+            sv = torch.linalg.svdvals(Xn).clamp_min(0.0)
+            sv_max = sv.max().clamp_min(1e-12)
+            sv_min = sv.min().clamp_min(1e-12)
+            self.log_metric(f"{prefix}sv_ratio", sv_max / sv_min)
+            p = sv.pow(2)
+            p = p / p.sum().clamp_min(1e-12)
+            ent = -(p * p.clamp_min(1e-12).log()).sum()
+            self.log_metric(f"{prefix}effective_dim", ent.exp())
+        except Exception:
+            # SVD can fail on degenerate matrices; treat as
+            # "metric unavailable this step" rather than crashing.
+            pass
+
+    # ------------------------------------------------------------------
+    # Tier-A: per-batch fidelity / encoder-side metrics.
+    # ------------------------------------------------------------------
+
+    def _log_tier_a_per_batch(
+        self, z: torch.Tensor, z_q: torch.Tensor
+    ) -> None:
+        """Quantization-error and encoder-norm summaries for the current batch.
+
+        Computed in FP32 inside an autocast-disabled wrapper (see
+        :meth:`__init_subclass__`), so the small extra arithmetic is exact
+        regardless of the outer mixed-precision context. Errors and norms
+        are taken along the channel dim — the last axis once the tensor is
+        in channel-last layout for both rank-4 ``(B,C,H,W)`` and rank-5
+        ``(B,C,D,H,W)`` inputs, and the first axis for ``(B, N, C)`` token
+        layouts. ``flatten_spatial_to_channel_last`` returns the token-style
+        tensor unchanged so this works in both layouts.
+        """
+        if z.shape != z_q.shape:
+            # Some quantizers reshape; if shapes differ we can't pair tokens
+            # element-wise. Skip rather than emit garbage.
+            return
+        z_cl = flatten_spatial_to_channel_last(z.detach()).reshape(-1, z.shape[1] if z.ndim >= 4 else z.shape[-1])
+        z_q_cl = flatten_spatial_to_channel_last(z_q.detach()).reshape(-1, z_q.shape[1] if z_q.ndim >= 4 else z_q.shape[-1])
+
+        diff = (z_cl - z_q_cl).float()
+        err = diff.norm(dim=-1)  # (N,)
+        self.log_metric("info/quantizer/quant_error_mean", err.mean())
+        if err.numel() > 1:
+            self.log_metric(
+                "info/quantizer/quant_error_p99",
+                torch.quantile(err, 0.99),
+            )
+
+        cos = F.cosine_similarity(z_cl.float(), z_q_cl.float(), dim=-1)
+        self.log_metric("info/quantizer/quant_error_cosine", cos.mean())
+
+        z_norm = z_cl.float().norm(dim=-1)
+        self.log_metric("info/quantizer/encoder_z_norm_mean", z_norm.mean())
+        self.log_metric("info/quantizer/encoder_z_norm_std", z_norm.std())
+
+        # Direction-only spread of the encoder activations: tells us
+        # whether the encoder uses the unit sphere or sits in a cone,
+        # independently of the magnitude statistics above.
+        self._log_directional_spread(z_cl, "info/quantizer/encoder_z_dir_")
+
+        # Encoder-to-codebook norm ratio (only meaningful when the codebook
+        # is a tensor we can reduce). SimVQ exposes ``embedding`` as a
+        # property returning a projected codebook tensor; classical VQ uses
+        # ``nn.Embedding``; LFQ/BSQ/FSQ have no learnable codebook → skip.
+        cb = self._resolve_codebook_tensor()
+        if cb is not None:
+            cb_norm_mean = cb.float().norm(dim=-1).mean().clamp_min(1e-8)
+            self.log_metric(
+                "info/quantizer/encoder_to_codebook_norm_ratio",
+                z_norm.mean() / cb_norm_mean,
+            )
+
+    def _resolve_codebook_tensor(self) -> Optional[torch.Tensor]:
+        """Return the (n_e, d) codebook tensor or ``None`` for codebook-free quantizers.
+
+        Handles the three storage flavours used in this file:
+
+        * ``nn.Embedding`` (classical VQ family) — read ``.weight``.
+        * ``nn.Parameter`` (SoftVQ) — the parameter itself is the codebook.
+        * Property returning a tensor (SimVQ — ``code_transform(frozen)``).
+
+        Anything else (None, modules without a tensor, codebook-free LFQ /
+        BSQ / FSQ) returns ``None``.
+        """
+        emb = getattr(self, "embedding", None)
+        if emb is None:
+            return None
+        if isinstance(emb, nn.Embedding):
+            return emb.weight
+        if isinstance(emb, torch.Tensor):
+            return emb
+        weight = getattr(emb, "weight", None)
+        if isinstance(weight, torch.Tensor):
+            return weight
+        return None
+
+    # ------------------------------------------------------------------
+    # Tier-B: codebook-state geometry.
+    # ------------------------------------------------------------------
+
+    def _log_tier_b_codebook_state(self) -> None:
+        """Emit codebook-norm summary, stable rank, and step-to-step update norm.
+
+        Pair-distance metrics (mean / min) are deliberately omitted — they
+        cost O(n_e²·d) which is prohibitive for an 8k+ codebook on every
+        forward. Stable rank uses ``torch.linalg.matrix_norm(..., ord=2)``
+        which is cheap when ``d ≪ n_e`` (the common case in this codebase).
+        """
+        cb = self._resolve_codebook_tensor()
+        if cb is None or cb.ndim != 2 or cb.numel() == 0:
+            return
+        E = cb.detach().float()
+
+        norms = E.norm(dim=-1)
+        self.log_metric("info/quantizer/codebook_norm_mean", norms.mean())
+        self.log_metric("info/quantizer/codebook_norm_std", norms.std())
+
+        try:
+            fro_sq = (E * E).sum()
+            spec = torch.linalg.matrix_norm(E, ord=2)
+            stable_rank = fro_sq / spec.pow(2).clamp_min(1e-12)
+            self.log_metric(
+                "info/quantizer/codebook_stable_rank", stable_rank
+            )
+        except Exception:
+            # SVD can fail on degenerate matrices; we treat it as
+            # "metric unavailable this step" rather than crashing the hook.
+            pass
+
+        # Direction-only spread of the codebook: answers "do the codes
+        # cover the sphere or live in a cone?" — complements the
+        # magnitude-only ``codebook_norm_*`` and ``codebook_stable_rank``.
+        self._log_directional_spread(E, "info/quantizer/codebook_dir_")
+
+        prev = getattr(self, "_prev_codebook", None)
+        if isinstance(prev, torch.Tensor) and prev.shape == E.shape:
+            update = (E - prev).norm()
+            self.log_metric("info/quantizer/codebook_update_norm", update)
+        # Cache without registering as a buffer — we don't want the
+        # snapshot moving with .to() unexpectedly or appearing in
+        # state_dict; it's a transient instrumentation cache.
+        self._prev_codebook = E.clone()
+
+    # ------------------------------------------------------------------
+    # Tier-C: windowed usage-distribution snapshot.
+    # ------------------------------------------------------------------
+
+    def _snapshot_window_metrics(self) -> None:
+        """Summarise the cumulative usage buffer(s) at the close of a window.
+
+        Writes the full Tier-C bundle via :meth:`log_metric` so the values
+        persist through the next window without being recomputed each step.
+        Single-level quantizers emit one bundle; residual / multi-level
+        variants additionally emit per-level bundles keyed with a
+        ``_level_{i}`` suffix.
+        """
+        usage = getattr(self, "_usage_buffer", None)
+        if isinstance(usage, torch.Tensor):
+            self._log_window_metrics_from_usage(usage, "info/quantizer/", "")
+        for i, buf in enumerate(self._iter_level_usage_buffers()):
+            self._log_window_metrics_from_usage(
+                buf, "info/quantizer/", f"_level_{i}"
+            )
+
+    def _log_window_metrics_from_usage(
+        self, usage: torch.Tensor, prefix: str, suffix: str
+    ) -> None:
+        """Compute the Tier-C metric bundle from one usage histogram."""
+        n_e = int(usage.numel())
+        if n_e == 0:
+            return
+        total = float(usage.sum().item())
+        if total <= 0.0:
+            # Empty window (track_usage off, or no forwards counted) —
+            # don't emit misleading "all dead" numbers.
+            return
+        usage_f = usage.detach().float()
+        probs = usage_f / usage_f.sum().clamp_min(1.0)
+
+        alive = int((usage >= self.dead_code_threshold).sum().item())
+        self.log_metric(f"{prefix}active_code_count{suffix}", alive)
+        self.log_metric(
+            f"{prefix}dead_code_ratio{suffix}",
+            1.0 - alive / n_e,
+        )
+        self.log_metric(
+            f"{prefix}codebook_utilization{suffix}",
+            alive / n_e,
+        )
+        self.log_metric(
+            f"{prefix}total_tokens_seen_window{suffix}", int(total)
+        )
+
+        # Distribution-shape metrics. ``log(n_e)`` is the entropy of a
+        # uniform distribution over the codebook; normalising by it yields
+        # a 0..1 number that's directly readable.
+        log_n_e = math.log(n_e) if n_e > 1 else 1.0
+        # H(p) over the support of `probs`. zeros contribute 0·log0 = 0.
+        nonzero = probs[probs > 0]
+        H = -(nonzero * nonzero.log()).sum().item() if nonzero.numel() > 0 else 0.0
+        self.log_metric(f"{prefix}usage_entropy_norm{suffix}", H / log_n_e)
+        # KL(p || U) = log(n_e) - H(p) ≥ 0; rises to log(n_e) at full collapse.
+        self.log_metric(
+            f"{prefix}usage_kl_to_uniform{suffix}", log_n_e - H
+        )
+
+        # Sorted shares for tail-mass / dominance metrics.
+        sorted_probs, _ = torch.sort(probs, descending=True)
+        self.log_metric(
+            f"{prefix}top1_share{suffix}", sorted_probs[0].item()
+        )
+        top1pct = max(1, math.ceil(n_e / 100))
+        self.log_metric(
+            f"{prefix}top1pct_share{suffix}",
+            sorted_probs[:top1pct].sum().item(),
+        )
+
+        # Gini coefficient on the usage histogram. Standard formula:
+        #   G = (Σ_i (2i − n − 1) · x_(i)) / (n · Σ x)
+        # where x_(i) is the sorted (ascending) sequence. Implemented from
+        # the sorted-descending probs we already have.
+        ascending, _ = torch.sort(probs)  # ascending
+        idx = torch.arange(1, n_e + 1, device=ascending.device, dtype=ascending.dtype)
+        weighted = ((2 * idx - n_e - 1) * ascending).sum()
+        denom = (n_e * ascending.sum()).clamp_min(1e-12)
+        self.log_metric(f"{prefix}usage_gini{suffix}", (weighted / denom).item())
 
     # ------------------------------------------------------------------
     # Entropy regularization (opt-in, cross-cutting).
@@ -672,10 +1046,10 @@ class AbstractQuantizer(nn.Module, MetricLoggerMixin, ABC):
             temperature=self.entropy_loss_temperature,
             entropy_gamma=self.entropy_gamma,
         )
-        self.log_metric("Info/quantizer/entropy_per_sample", per_sample.detach())
-        self.log_metric("Info/quantizer/entropy_avg", avg.detach())
+        self.log_metric("info/quantizer/entropy_per_sample", per_sample.detach())
+        self.log_metric("info/quantizer/entropy_avg", avg.detach())
         entropy_loss = self.entropy_loss_weight * (per_sample - avg)
-        self.log_metric("Info/quantizer/entropy_loss", entropy_loss.detach())
+        self.log_metric("info/quantizer/entropy_loss", entropy_loss.detach())
         # Stash non-detached components for callers (LFQ / BSQ) that include
         # them in their forward return tuple. Access via ``self._last_entropy_info``.
         self._last_entropy_info = (entropy_loss, per_sample, avg)
@@ -818,6 +1192,19 @@ class VectorQuantizer(AbstractQuantizer):
         commitment_loss = torch.mean((z_q.detach()-z)**2)
         codebook_loss = self.beta * torch.mean((z_q - z.detach()) ** 2)
         loss = commitment_loss + codebook_loss
+        self.log_metric("info/quantizer/commitment_loss", commitment_loss.detach())
+        self.log_metric("info/quantizer/codebook_loss", codebook_loss.detach())
+
+        # Assignment margin: gap between nearest and second-nearest code.
+        # Low values flag unstable, near-tie assignments. Computed without
+        # gradients — purely diagnostic.
+        if d.size(1) >= 2:
+            with torch.no_grad():
+                top2 = torch.topk(d, 2, dim=1, largest=False).values
+                self.log_metric(
+                    "info/quantizer/assignment_margin",
+                    (top2[:, 1] - top2[:, 0]).mean(),
+                )
 
         # Rotation trick (https://arxiv.org/abs/2410.06424) or classic STE
         z_q = straight_through_estimator(z, z_q, use_rotation_trick=self.rotation_trick)
@@ -934,6 +1321,20 @@ class GumbelQuantize(AbstractQuantizer):
         qy = F.softmax(logits, dim=1)
         diff = self.kl_weight * torch.sum(qy * torch.log(qy * self.n_embed + 1e-10), dim=1).mean()
 
+        # Soft-assignment diagnostics (cheap; computed from ``qy`` either way).
+        with torch.no_grad():
+            # Per-token entropy: H(qy) per spatial location, then mean.
+            log_q = torch.log(qy.clamp_min(1e-10))
+            per_token_H = -(qy * log_q).sum(dim=1)
+            self.log_metric(
+                "info/quantizer/assignment_entropy_per_token",
+                per_token_H.mean(),
+            )
+            self.log_metric(
+                "info/quantizer/mean_top1_prob",
+                qy.max(dim=1).values.mean(),
+            )
+
         ind = soft_one_hot.argmax(dim=1)
         if self.remap is not None:
             ind = self.remap_to_used(ind)
@@ -1024,13 +1425,29 @@ class VectorQuantizer2(AbstractQuantizer):
             onehot = F.one_hot(min_indices, self.n_e).type(z.dtype)
             self.embedding.perform_ema_update(onehot, z_flat, self.n_e)
 
-        # Standard VQ loss
+        # Standard VQ loss — split into named components for observability.
+        # In legacy mode the unweighted term is the commitment side and the
+        # ``beta``-weighted term is the codebook side; non-legacy swaps the
+        # two (matching the fix discussed in :class:`VectorQuantizer2`'s
+        # docstring). Logging the two pieces separately lets ``beta`` be
+        # tuned without inferring contributions from a single combined loss.
         if self.legacy:
-            loss = torch.mean((z_q.detach() - z) ** 2) + \
-                   self.beta * torch.mean((z_q - z.detach()) ** 2)
+            commitment_loss = torch.mean((z_q.detach() - z) ** 2)
+            codebook_loss = self.beta * torch.mean((z_q - z.detach()) ** 2)
         else:
-            loss = self.beta * torch.mean((z_q.detach() - z) ** 2) + \
-                    torch.mean((z_q - z.detach()) ** 2)
+            commitment_loss = self.beta * torch.mean((z_q.detach() - z) ** 2)
+            codebook_loss = torch.mean((z_q - z.detach()) ** 2)
+        loss = commitment_loss + codebook_loss
+        self.log_metric("info/quantizer/commitment_loss", commitment_loss.detach())
+        self.log_metric("info/quantizer/codebook_loss", codebook_loss.detach())
+
+        if d.size(1) >= 2:
+            with torch.no_grad():
+                top2 = torch.topk(d, 2, dim=1, largest=False).values
+                self.log_metric(
+                    "info/quantizer/assignment_margin",
+                    (top2[:, 1] - top2[:, 0]).mean(),
+                )
 
         loss = loss + self.entropy_regularization(-d)
 
@@ -1227,19 +1644,29 @@ class SimVQ(AbstractQuantizer):
         z_flat = z.view(-1, self.in_channels)
         codebook = self.embedding  # projected codebook
 
-        # Nearest codebook entry via L2 distance
+        # Nearest codebook entry via L2 distance. Keep ``d`` so we can log
+        # an assignment-margin diagnostic without recomputing distances.
         with torch.no_grad():
-            indices, _ = nearest_codebook_entry_l2(z_flat, codebook)
+            indices, d = nearest_codebook_entry_l2(z_flat, codebook)
 
-        
+
         # Get quantized vectors
         z_q_flat = codebook[indices]
 
-        # Commitment loss with STE trick
-        loss = (
-            F.mse_loss(z_flat.detach(), z_q_flat)
-            + F.mse_loss(z_flat, z_q_flat.detach()) * self.beta
-        ) * self.commitment_weight
+        # Commitment loss with STE trick — split into named components.
+        commitment_loss = F.mse_loss(z_flat.detach(), z_q_flat) * self.commitment_weight
+        codebook_loss = F.mse_loss(z_flat, z_q_flat.detach()) * self.beta * self.commitment_weight
+        loss = commitment_loss + codebook_loss
+        self.log_metric("info/quantizer/commitment_loss", commitment_loss.detach())
+        self.log_metric("info/quantizer/codebook_loss", codebook_loss.detach())
+
+        if d.size(1) >= 2:
+            with torch.no_grad():
+                top2 = torch.topk(d, 2, dim=1, largest=False).values
+                self.log_metric(
+                    "info/quantizer/assignment_margin",
+                    (top2[:, 1] - top2[:, 0]).mean(),
+                )
 
         # Rotation trick or straight-through
         z_q_flat = straight_through_estimator(z_flat, z_q_flat, use_rotation_trick=self.rotation_trick)
@@ -1340,6 +1767,21 @@ class ResidualQuantizer(ResidualQuantizerBase):
             # ---------------------------------------------------------
             z_q, loss, indices = q(residual)
 
+            # Per-level diagnostics — residual norm before this level
+            # quantises it (catches "deep levels see vanishing residual"),
+            # and the level's own loss (so the user can see which level is
+            # carrying the commitment cost).
+            with torch.no_grad():
+                self.log_metric(
+                    f"info/quantizer/residual_norm_level_{i}",
+                    residual.detach().norm(),
+                )
+            if isinstance(loss, torch.Tensor) and loss.dim() == 0:
+                self.log_metric(
+                    f"info/quantizer/commitment_loss_level_{i}",
+                    loss.detach(),
+                )
+
             quantized_outputs.append(z_q)
             losses.append(loss)
             all_indices.append(indices)
@@ -1350,6 +1792,17 @@ class ResidualQuantizer(ResidualQuantizerBase):
         # -------- Aggregate outputs -----------------------------------------------------
         final_quantized = sum(quantized_outputs)
         total_loss = sum(losses)
+
+        # Level contribution share — what fraction of the final quantized
+        # tensor's energy comes from each level. Cheap; helps spot deep
+        # levels that have stopped contributing.
+        with torch.no_grad():
+            denom = final_quantized.detach().pow(2).sum().clamp_min(1e-12)
+            for i, q_i in enumerate(quantized_outputs):
+                share = q_i.detach().pow(2).sum() / denom
+                self.log_metric(
+                    f"info/quantizer/level_contribution_share_{i}", share
+                )
 
         return final_quantized, total_loss, all_indices
 
@@ -1482,6 +1935,17 @@ class QincoResidualQuantizer(ResidualQuantizerBase):
             # QINCo: quantizer sees residual and x_prev (partial reconstruction)
             z_q, loss, indices = q(residual, x_prev=x_prev)
 
+            with torch.no_grad():
+                self.log_metric(
+                    f"info/quantizer/residual_norm_level_{i}",
+                    residual.detach().norm(),
+                )
+            if isinstance(loss, torch.Tensor) and loss.dim() == 0:
+                self.log_metric(
+                    f"info/quantizer/commitment_loss_level_{i}",
+                    loss.detach(),
+                )
+
             quantized_outputs.append(z_q)
             losses.append(loss)
             all_indices.append(indices)
@@ -1494,6 +1958,14 @@ class QincoResidualQuantizer(ResidualQuantizerBase):
 
         final_quantized = sum(quantized_outputs)
         total_loss = sum(losses)
+
+        with torch.no_grad():
+            denom = final_quantized.detach().pow(2).sum().clamp_min(1e-12)
+            for i, q_i in enumerate(quantized_outputs):
+                share = q_i.detach().pow(2).sum() / denom
+                self.log_metric(
+                    f"info/quantizer/level_contribution_share_{i}", share
+                )
 
         return final_quantized, total_loss, all_indices
 
@@ -1667,6 +2139,7 @@ class MultiScaleResidualQuantizer(ResidualQuantizerBase):
             vocab_hit_V = torch.zeros(self.n_e, dtype=torch.float, device=f_BChw.device)
             SN = len(self.v_patch_nums)
             encoding_indices_list = []
+            level_contributions: List[torch.Tensor] = []
             for si, pn in enumerate(self.v_patch_nums):
                 if self.using_znorm:
                     rest_NC = F.interpolate(f_rest, size=(pn, pn), mode='area').permute(0, 2, 3, 1).reshape(-1, C) if (si != SN-1) else f_rest.permute(0, 2, 3, 1).reshape(-1, C)
@@ -1677,16 +2150,24 @@ class MultiScaleResidualQuantizer(ResidualQuantizerBase):
                     d_no_grad = torch.sum(rest_NC.square(), dim=1, keepdim=True) + torch.sum(self.embedding.weight.data.square(), dim=1, keepdim=False)
                     d_no_grad.addmm_(rest_NC, self.embedding.weight.data.T, alpha=-2, beta=1)
                     idx_N = torch.argmin(d_no_grad, dim=1)
-                
+
+                # Residual norm before this scale acts on it — falls
+                # monotonically with depth in a healthy decomposition.
+                self.log_metric(
+                    f"info/quantizer/residual_norm_level_{si}",
+                    f_rest.detach().norm(),
+                )
+
                 hit_V = idx_N.bincount(minlength=self.n_e).float()
                 encoding_indices_list.append(idx_N)
-                
+
                 idx_Bhw = idx_N.view(B, pn, pn)
                 h_BChw = F.interpolate(self.embedding(idx_Bhw).permute(0, 3, 1, 2), size=(H, W), mode='bicubic').contiguous() if (si != SN-1) else self.embedding(idx_Bhw).permute(0, 3, 1, 2).contiguous()
                 h_BChw = self.quant_resi[si/(SN-1)](h_BChw)  # This will be identity if no quant_resi was provided
                 f_hat = f_hat + h_BChw
                 f_rest -= h_BChw
-                
+                level_contributions.append(h_BChw.detach().pow(2).sum())
+
                 if self.training:
                     if self.record_hit == 0: self.ema_vocab_hit_SV[si].copy_(hit_V)
                     elif self.record_hit < 100: self.ema_vocab_hit_SV[si].mul_(0.9).add_(hit_V.mul(0.1))
@@ -1694,8 +2175,15 @@ class MultiScaleResidualQuantizer(ResidualQuantizerBase):
                     self.record_hit += 1
                 vocab_hit_V.add_(hit_V)
                 mean_vq_loss += F.mse_loss(f_hat.data, f_BChw).mul_(self.beta) + F.mse_loss(f_hat, f_no_grad)
-            
+
             mean_vq_loss *= 1. / SN
+
+            denom = f_hat.detach().pow(2).sum().clamp_min(1e-12)
+            for i, energy in enumerate(level_contributions):
+                self.log_metric(
+                    f"info/quantizer/level_contribution_share_{i}",
+                    energy / denom,
+                )
             if self.rotation_trick:
                 f_hat = rotate_to(f_hat, f_BChw)
             else:
@@ -1980,19 +2468,26 @@ class MultiScaleResidualQuantizer3D(ResidualQuantizerBase):
             vocab_hit_V = torch.zeros(self.n_e, dtype=torch.float, device=f_input.device)
             SN = len(self.patch_sizes)
             encoding_indices_list = []
-            
+            level_contributions: List[torch.Tensor] = []
+
             for si, patch_size in enumerate(self.patch_sizes):
                 idx_N = self._compute_quantization(f_rest, patch_size, C, si, SN)
-                
+
+                self.log_metric(
+                    f"info/quantizer/residual_norm_level_{si}",
+                    f_rest.detach().norm(),
+                )
+
                 hit_V = idx_N.bincount(minlength=self.n_e).float()
                 encoding_indices_list.append(idx_N)
-                
+
                 idx_spatial = self._reshape_indices(idx_N, B, patch_size)
                 h = self._reconstruct_from_indices(idx_spatial, spatial_shape, si, SN)
-                
+
                 f_hat = f_hat + h
                 f_rest -= h
-                
+                level_contributions.append(h.detach().pow(2).sum())
+
                 if self.training:
                     if self.record_hit == 0: self.ema_vocab_hit_SV[si].copy_(hit_V)
                     elif self.record_hit < 100: self.ema_vocab_hit_SV[si].mul_(0.9).add_(hit_V.mul(0.1))
@@ -2000,8 +2495,15 @@ class MultiScaleResidualQuantizer3D(ResidualQuantizerBase):
                     self.record_hit += 1
                 vocab_hit_V.add_(hit_V)
                 mean_vq_loss += F.mse_loss(f_hat.data, f_input).mul_(self.beta) + F.mse_loss(f_hat, f_no_grad)
-            
+
             mean_vq_loss *= 1. / SN
+
+            denom = f_hat.detach().pow(2).sum().clamp_min(1e-12)
+            for i, energy in enumerate(level_contributions):
+                self.log_metric(
+                    f"info/quantizer/level_contribution_share_{i}",
+                    energy / denom,
+                )
             if self.rotation_trick:
                 f_hat = rotate_to(f_hat, f_input)
             else:
@@ -2204,6 +2706,7 @@ class LookupFreeQuantizer(AbstractQuantizer):
 
         # compute loss for embedding
         commitment_loss = self.commitment_cost * torch.mean((z_quantized.detach() - z) **2)
+        self.log_metric("info/quantizer/commitment_loss", commitment_loss.detach())
 
         # Entropy regularization via the shared base-class helper (opt-in via
         # ``entropy_loss_weight``; gated on ``self.training``). Skip the
@@ -2293,7 +2796,8 @@ class BinarySphericalQuantizer(LookupFreeQuantizer):
 
         # Losses (use unit sphere reference)
         commitment_loss = self.commitment_cost * F.mse_loss(z_quantized.detach(), z_unit)
-        
+        self.log_metric("info/quantizer/commitment_loss", commitment_loss.detach())
+
         # Entropy regularization via the shared base-class helper. BSQ uses the
         # normalized input (``z_unit``) for a better soft-quantization signal.
         if self.entropy_loss_weight != 0.0 and self.training:
@@ -2545,7 +3049,20 @@ class SoftVectorQuantizer(AbstractQuantizer):
         
         # Get indices for usage tracking
         indices = torch.argmax(probs, dim=-1)  # (N,)
-        
+
+        # Soft-assignment diagnostics (cheap; ``probs`` is already on hand).
+        with torch.no_grad():
+            log_p = torch.log(probs.clamp_min(1e-10))
+            per_token_H = -(probs * log_p).sum(dim=-1)
+            self.log_metric(
+                "info/quantizer/assignment_entropy_per_token",
+                per_token_H.mean(),
+            )
+            self.log_metric(
+                "info/quantizer/mean_top1_prob",
+                probs.max(dim=-1).values.mean(),
+            )
+
         # Entropy regularization via the shared base-class helper (opt-in via
         # ``entropy_loss_weight``; gated on ``self.training``; returns zero
         # otherwise). Canonical formula for the whole quantizer family.
@@ -2553,6 +3070,241 @@ class SoftVectorQuantizer(AbstractQuantizer):
 
         # Restore shape (channel-first)
         z_q = unflatten_spatial_to_channel_first(z_q)
-        
+
         return z_q, entropy_loss, indices
+
+
+@register_model(f"{_REGISTRY_PREFIX}diveq",
+                paper_url="https://arxiv.org/pdf/2509.26469")
+class DiVeQ(AbstractQuantizer):
+    """DiVeQ — Differentiable Vector Quantization without auxiliary losses.
+
+    End-to-end-trainable VQ that replaces the straight-through estimator with
+    a directional-noise-based differentiable surrogate, removing the need for
+    commitment / codebook losses or temperature schedules. A built-in
+    codebook-replacement step periodically discards rarely-used entries by
+    perturbing frequently-used ones.
+
+    Args:
+        n_e: codebook cardinality.
+        e_dim: embedding dimension per code.
+        noise_var: std-dev of the directional noise injected during training
+            (the original paper names this ``noise_var`` even though it is the
+            std passed to ``Normal``). Recommended < 1e-2.
+        replacement_iters: codebook-replacement interval in training steps.
+            Recommended 50–300.
+        discard_threshold: usage-ratio below which a codeword is replaced
+            (``0.01`` → entries used less than 1 % of the window).
+        perturb_eps: magnitude of the random perturbation added to a used
+            codeword when overwriting an unused entry.
+        uniform_init: initialise codebook from a scaled uniform (paper
+            default) instead of a scaled normal.
+        allow_warning: emit ``UserWarning``s when hyperparameters are outside
+            the recommended ranges.
+        verbose: log codebook-replacement events.
+    """
+
+    def __init__(
+        self,
+        n_e: int,
+        e_dim: int,
+        noise_var: float = 0.001,
+        replacement_iters: int = 100,
+        discard_threshold: float = 0.01,
+        perturb_eps: float = 1e-9,
+        uniform_init: bool = True,
+        allow_warning: bool = True,
+        verbose: bool = False,
+    ):
+        super().__init__()
+        self.n_e = n_e
+        self.e_dim = e_dim
+        self.noise_var = noise_var
+        self.replacement_iters = replacement_iters
+        self.discard_threshold = discard_threshold
+        self.perturb_eps = perturb_eps
+        self.uniform_init = uniform_init
+        self.allow_warning = allow_warning
+        self.verbose = verbose
+
+        self._check_constraints()
+        if allow_warning:
+            self._emit_constructor_warnings()
+
+        # Codebook initialisation matches the paper: small-magnitude samples
+        # scaled by ``1 / n_e`` so the quantizer starts near the encoder's
+        # output regime.
+        if uniform_init:
+            codebook = torch.rand(n_e, e_dim) * (1.0 / n_e)
+        else:
+            codebook = torch.randn(n_e, e_dim) * (1.0 / n_e)
+        # Stored as ``embedding`` (not ``codebook``) so Tier-B codebook-state
+        # metrics in :class:`AbstractQuantizer` pick it up automatically.
+        self.embedding = nn.Parameter(codebook)
+
+        # Replacement bookkeeping — persistent so resumed runs keep their
+        # window state. Separate from the framework's ``_usage_buffer`` which
+        # is used by Tier-C snapshot metrics.
+        self.register_buffer(
+            "codebook_usage", torch.zeros(n_e, dtype=torch.int64)
+        )
+        self.register_buffer(
+            "iter_counter", torch.zeros(1, dtype=torch.int64)
+        )
+
+    # ------------------------------------------------------------------
+    def forward(self, z: torch.Tensor):
+        """Quantize ``z`` and return ``(z_q, loss, indices)``.
+
+        ``loss`` is a zero scalar — DiVeQ has no auxiliary loss by design.
+        During training the differentiable surrogate (directional noise) is
+        applied; in eval mode the output is the hard nearest-codeword.
+        """
+        z = z.float()
+
+        # Channel-last + flatten so the core math operates on (N, D).
+        z = flatten_spatial_to_channel_last(z, contiguous=True)
+        flat_shape = z.shape
+        z_flat = z.reshape(-1, self.e_dim)
+
+        codebook = self.embedding
+
+        indices, d = nearest_codebook_entry_l2(z_flat, codebook)
+        z_hard_flat = codebook[indices]
+
+        if self.training:
+            # Directional noise around (z_hard - z); the magnitude is fixed
+            # to the true quantization error and only the *direction* is
+            # randomised, then detached so the gradient through ``z_q``
+            # reduces to identity w.r.t. ``z``.
+            direction = z_hard_flat - z_flat
+            noise = torch.randn_like(z_flat) * self.noise_var
+            random_vectors = noise + direction
+            normalized = random_vectors / torch.linalg.norm(
+                random_vectors, dim=1, keepdim=True
+            ).clamp_min(1e-12)
+            error_magnitude = torch.linalg.norm(
+                direction, dim=1, keepdim=True
+            )
+            vq_error = error_magnitude * normalized.detach()
+            z_q_flat = z_flat + vq_error
+        else:
+            z_q_flat = z_hard_flat
+
+        # Assignment-margin diagnostic (cheap, shared with VQ2/SimVQ).
+        if d.size(1) >= 2:
+            with torch.no_grad():
+                top2 = torch.topk(d, 2, dim=1, largest=False).values
+                self.log_metric(
+                    "info/quantizer/assignment_margin",
+                    (top2[:, 1] - top2[:, 0]).mean(),
+                )
+
+        # Codebook replacement bookkeeping — training-time only so eval
+        # passes don't tick the counter.
+        if self.training:
+            with torch.no_grad():
+                self.codebook_usage.scatter_add_(
+                    0, indices, torch.ones_like(indices, dtype=self.codebook_usage.dtype)
+                )
+                self.iter_counter += 1
+                if int(self.iter_counter.item()) % self.replacement_iters == 0:
+                    self._replace_unused_entries()
+
+        # Restore spatial shape.
+        z_q = z_q_flat.view(flat_shape)
+        z_q = unflatten_spatial_to_channel_first(z_q, contiguous=True)
+
+        loss = torch.zeros((), device=z_q.device, dtype=z_q.dtype)
+        return z_q, loss, indices
+
+    # ------------------------------------------------------------------
+    def get_codebook_entry(self, indices: torch.Tensor, shape: Optional[Tuple[int, ...]] = None) -> torch.Tensor:
+        z_q = self.embedding[indices]
+        if shape is not None:
+            z_q = z_q.view(shape)
+        return z_q
+
+    # ---------------- Utility / validation ----------------
+    def _check_constraints(self) -> None:
+        if self.noise_var <= 0.0:
+            raise ValueError(
+                "`noise_var` must be a positive float; recommended < 1e-2."
+            )
+        if (self.replacement_iters <= 0) or (not isinstance(self.replacement_iters, int)):
+            raise ValueError(
+                "`replacement_iters` must be a positive integer; recommended 50–300."
+            )
+        if (self.discard_threshold < 0.0) or (self.discard_threshold > 1.0):
+            raise ValueError(
+                "`discard_threshold` must be in [0, 1]; recommended 0.01–0.05."
+            )
+
+    def _emit_constructor_warnings(self) -> None:
+        if self.noise_var > 0.01:
+            warnings.warn(
+                f"`noise_var`={self.noise_var} is large; values > 0.01 may"
+                f" overshoot nearest-neighbor mapping.",
+                UserWarning,
+            )
+        if self.replacement_iters < 50:
+            warnings.warn(
+                f"`replacement_iters`={self.replacement_iters} is small;"
+                f" values < 50 may cause too-frequent codebook replacements.",
+                UserWarning,
+            )
+        elif self.replacement_iters > 300:
+            warnings.warn(
+                f"`replacement_iters`={self.replacement_iters} is large;"
+                f" values > 300 may cause too-sporadic codebook replacements.",
+                UserWarning,
+            )
+        if self.discard_threshold > 0.05:
+            warnings.warn(
+                f"`discard_threshold`={self.discard_threshold} is large;"
+                f" values > 0.05 may discard rarely-but-usefully-used codewords.",
+                UserWarning,
+            )
+        if self.perturb_eps > 1e-6:
+            warnings.warn(
+                f"`perturb_eps`={self.perturb_eps} is large; values > 1e-6"
+                f" may cause big perturbations from used codewords.",
+                UserWarning,
+            )
+
+    @torch.no_grad()
+    def _replace_unused_entries(self) -> None:
+        usage_ratio = self.codebook_usage.float() / float(self.replacement_iters)
+        unused_indices = torch.where(usage_ratio < self.discard_threshold)[0]
+        used_indices = torch.where(usage_ratio >= self.discard_threshold)[0]
+
+        if unused_indices.numel() == 0 or used_indices.numel() == 0:
+            self.codebook_usage.zero_()
+            return
+
+        unused_count = unused_indices.numel()
+        used_probs = self.codebook_usage[used_indices].float()
+        used_probs = used_probs / used_probs.sum()
+        sampled = used_probs.multinomial(num_samples=unused_count, replacement=True)
+        sampled_indices = used_indices[sampled]
+
+        used_codebooks = self.embedding[sampled_indices].clone()
+        self.embedding.data[unused_indices] = (
+            used_codebooks + self.perturb_eps * torch.randn_like(used_codebooks)
+        )
+        self.codebook_usage.zero_()
+
+        self.log_metric("info/quantizer/diveq_codes_replaced", float(unused_count))
+        if self.verbose:
+            logger.info("DiVeQ replaced %d codewords", unused_count)
+
+    def extra_repr(self) -> str:
+        return (
+            f"n_e={self.n_e}, e_dim={self.e_dim}, "
+            f"noise_var={self.noise_var}, "
+            f"replacement_iters={self.replacement_iters}, "
+            f"discard_threshold={self.discard_threshold}, "
+            f"perturb_eps={self.perturb_eps}, "
+            f"uniform_init={self.uniform_init}"
+        )
 

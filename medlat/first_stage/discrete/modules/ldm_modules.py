@@ -6,6 +6,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+### GENERAL ###
 
 def get_conv_layer(dims):
     if dims == 2:
@@ -89,6 +90,7 @@ class ResnetBlock(nn.Module):
         conv_shortcut=False,
         dropout,
         temb_channels=512,
+        num_groups=32,
         dims=2
     ):
         super().__init__()
@@ -96,15 +98,16 @@ class ResnetBlock(nn.Module):
         out_channels = in_channels if out_channels is None else out_channels
         self.out_channels = out_channels
         self.use_conv_shortcut = conv_shortcut
+        self.dims = dims
         conv_layer = get_conv_layer(dims)
 
-        self.norm1 = Normalize(in_channels)
+        self.norm1 = Normalize(in_channels, num_groups=num_groups)
         self.conv1 = conv_layer(
             in_channels, out_channels, kernel_size=3, stride=1, padding=1
         )
         if temb_channels > 0:
             self.temb_proj = torch.nn.Linear(temb_channels, out_channels)
-        self.norm2 = Normalize(out_channels)
+        self.norm2 = Normalize(out_channels, num_groups=num_groups)
         self.dropout = torch.nn.Dropout(dropout)
         self.conv2 = conv_layer(
             out_channels, out_channels, kernel_size=3, stride=1, padding=1
@@ -126,7 +129,12 @@ class ResnetBlock(nn.Module):
         h = self.conv1(h)
 
         if temb is not None:
-            h = h + self.temb_proj(nonlinearity(temb))[:, :, None, None]
+            temb_proj = self.temb_proj(nonlinearity(temb))
+            # Broadcast temb to match spatial dimensions
+            if self.dims == 2:
+                h = h + temb_proj[:, :, None, None]
+            else:  # dims == 3
+                h = h + temb_proj[:, :, None, None, None]
 
         h = self.norm2(h)
         h = nonlinearity(h)
@@ -143,13 +151,13 @@ class ResnetBlock(nn.Module):
 
 
 class AttnBlock(nn.Module):
-    def __init__(self, in_channels, dims=2):
+    def __init__(self, in_channels, dims=2, num_groups=32):
         super().__init__()
         self.in_channels = in_channels
         self.dims = dims
         conv_layer = get_conv_layer(dims)
 
-        self.norm = Normalize(in_channels)
+        self.norm = Normalize(in_channels, num_groups=num_groups)
         self.q = conv_layer(
             in_channels, in_channels, kernel_size=1, stride=1, padding=0
         )
@@ -218,6 +226,7 @@ class Encoder(nn.Module):
         double_z=True,
         dims=2,
         ignore_mid_attn=False,
+        num_groups=32,
         **ignore_kwargs,
     ):
         super().__init__()
@@ -268,7 +277,8 @@ class Encoder(nn.Module):
                         out_channels=block_out,
                         temb_channels=self.temb_ch,
                         dropout=dropout,
-                        dims=dims
+                        dims=dims,
+                        num_groups=num_groups,
                     )
                 )
                 block_in = block_out
@@ -291,7 +301,8 @@ class Encoder(nn.Module):
             out_channels=block_in,
             temb_channels=self.temb_ch,
             dropout=dropout,
-            dims=dims
+            dims=dims,
+            num_groups=num_groups,
         )
         if not ignore_mid_attn:
             self.mid.attn_1 = AttnBlock(block_in, dims=dims)
@@ -300,11 +311,12 @@ class Encoder(nn.Module):
             out_channels=block_in,
             temb_channels=self.temb_ch,
             dropout=dropout,
-            dims=dims
+            dims=dims,
+            num_groups=num_groups,
         )
 
         # end
-        self.norm_out = Normalize(block_in)
+        self.norm_out = Normalize(block_in, num_groups=num_groups)
         self.conv_out = conv_layer(
             block_in,
             2 * z_channels if double_z else z_channels,
@@ -361,6 +373,7 @@ class Decoder(nn.Module):
         give_pre_end=False,
         dims=2,
         ignore_mid_attn=False,
+        num_groups=32,
         **ignore_kwargs,
     ):
         super().__init__()
@@ -417,7 +430,8 @@ class Decoder(nn.Module):
             out_channels=block_in,
             temb_channels=self.temb_ch,
             dropout=dropout,
-            dims=dims
+            dims=dims,
+            num_groups=num_groups,
         )
         if not ignore_mid_attn:
             self.mid.attn_1 = AttnBlock(block_in, dims=dims)
@@ -426,7 +440,8 @@ class Decoder(nn.Module):
             out_channels=block_in,
             temb_channels=self.temb_ch,
             dropout=dropout,
-            dims=dims
+            dims=dims,
+            num_groups=num_groups,
         )
 
         # upsampling
@@ -442,7 +457,8 @@ class Decoder(nn.Module):
                         out_channels=block_out,
                         temb_channels=self.temb_ch,
                         dropout=dropout,
-                        dims=dims
+                        dims=dims,
+                        num_groups=num_groups,
                     )
                 )
                 block_in = block_out
@@ -459,7 +475,7 @@ class Decoder(nn.Module):
             self.up.insert(0, up)  # prepend to get consistent order
 
         # end
-        self.norm_out = Normalize(block_in)
+        self.norm_out = Normalize(block_in, num_groups=num_groups)
         self.conv_out = conv_layer(
             block_in, out_ch, kernel_size=3, stride=1, padding=1
         )
@@ -501,16 +517,152 @@ class Decoder(nn.Module):
     def get_last_layer(self) -> nn.Parameter:
         return self.conv_out.weight
 
-### ViTVQ ### 
+### FOR AEKL ###
 
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight)
-        if m.bias is not None:
-            nn.init.constant_(m.bias, 0)
-    elif isinstance(m, nn.LayerNorm):
-        nn.init.constant_(m.bias, 0)
-        nn.init.constant_(m.weight, 1.0)
-    elif isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Conv3d, nn.ConvTranspose3d)):
-        w = m.weight.data
-        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+class DiagonalGaussianDistribution(object):
+    def __init__(self, parameters, deterministic=False, channel_dim=1):
+        self.parameters = parameters
+        self.mean, self.logvar = torch.chunk(parameters, 2, dim=channel_dim)
+        self.logvar = torch.clamp(self.logvar, -30.0, 20.0)
+        self.deterministic = deterministic
+        self.std = torch.exp(0.5 * self.logvar)
+        self.var = torch.exp(self.logvar)
+        if self.deterministic:
+            self.var = self.std = torch.zeros_like(self.mean).to(
+                device=self.parameters.device
+            )
+
+    def sample(self):
+        x = self.mean + self.std * torch.randn(self.mean.shape).to(
+            device=self.parameters.device
+        )
+        return x
+
+    def kl(self, other=None):
+        if self.deterministic:
+            return torch.tensor([0.0], device=self.mean.device)
+        else:
+            reduce_dims = list(range(1, self.mean.ndim))  # all dims except batch
+            if other is None:
+                return 0.5 * torch.sum(
+                    torch.pow(self.mean, 2) + self.var - 1.0 - self.logvar,
+                    dim=reduce_dims
+                )
+            else:
+                return 0.5 * torch.sum(
+                    torch.pow(self.mean - other.mean, 2) / other.var
+                    + self.var / other.var
+                    - 1.0
+                    - self.logvar
+                    + other.logvar,
+                    dim=reduce_dims
+                )
+
+    def nll(self, sample):
+        if self.deterministic:
+            return torch.tensor([0.0], device=self.mean.device)
+        logtwopi = np.log(2.0 * np.pi)
+        reduce_dims = list(range(1, self.mean.ndim))  # sum over everything but batch
+        return 0.5 * torch.sum(
+            logtwopi + self.logvar + torch.pow(sample - self.mean, 2) / self.var,
+            dim=reduce_dims
+        )
+
+    def mode(self):
+        return self.mean
+    
+
+# ### ViTVQ ### 
+
+# def init_weights(m):
+#     if isinstance(m, nn.Linear):
+#         torch.nn.init.xavier_uniform_(m.weight)
+#         if m.bias is not None:
+#             nn.init.constant_(m.bias, 0)
+#     elif isinstance(m, nn.LayerNorm):
+#         nn.init.constant_(m.bias, 0)
+#         nn.init.constant_(m.weight, 1.0)
+#     elif isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Conv3d, nn.ConvTranspose3d)):
+#         w = m.weight.data
+#         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+
+# class ViTEncoder(nn.Module):
+#     def __init__(self, image_size: Union[Tuple[int, ...], int], patch_size: Union[Tuple[int, ...], int],
+#                  dim: int, depth: int = 12, num_heads: int = 12, mlp_ratio: int = 4, channels: int = 3, dims: int = 2, **kwargs) -> None:
+#         super().__init__()
+#         if isinstance(image_size, int):
+#             image_size = (image_size,) * dims
+#         if isinstance(patch_size, int):
+#             patch_size = (patch_size,) * dims
+
+#         assert all(i % p == 0 for i, p in zip(image_size, patch_size)), 'Input dimensions must be divisible by the patch size.'
+#         pos_embedding = get_sincos_pos_embed(dim, tuple(i // p for i, p in zip(image_size, patch_size)), dims)
+
+#         if dims == 2:
+#             self.to_patch_embedding = nn.Sequential(
+#                 nn.Conv2d(channels, dim, kernel_size=patch_size, stride=patch_size),
+#                 Rearrange('b c h w -> b (h w) c'),
+#             )
+#         elif dims == 3:
+#             self.to_patch_embedding = nn.Sequential(
+#                 nn.Conv3d(channels, dim, kernel_size=patch_size, stride=patch_size),
+#                 Rearrange('b c d h w -> b (d h w) c'),
+#             )
+#         else:
+#             raise ValueError("dims must be 2 or 3.")
+
+#         self.pos_embedding = nn.Parameter(torch.from_numpy(pos_embedding).float().unsqueeze(0), requires_grad=False)
+#         self.encoder_blocks = nn.ModuleList([
+#             Block(dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=nn.LayerNorm,
+#                   proj_drop=0.1, attn_drop=0.1) for _ in range(depth)])
+
+#         self.apply(init_weights)
+
+#     def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
+#         x = self.to_patch_embedding(x)
+#         x = x + self.pos_embedding
+#         for block in self.encoder_blocks:
+#             x = block(x)
+#         return x
+
+# class ViTDecoder(nn.Module):
+#     def __init__(self, image_size: Union[Tuple[int, ...], int], patch_size: Union[Tuple[int, ...], int],
+#                  dim: int, depth: int, num_heads: int, mlp_ratio: int, channels: int = 3, dims: int = 2, **kwargs) -> None:
+#         super().__init__()
+#         if isinstance(image_size, int):
+#             image_size = (image_size,) * dims
+#         if isinstance(patch_size, int):
+#             patch_size = (patch_size,) * dims
+
+#         assert all(o % p == 0 for o, p in zip(image_size, patch_size)), 'Output dimensions must be divisible by the patch size.'
+#         pos_embedding = get_sincos_pos_embed(dim, tuple(o // p for o, p in zip(image_size, patch_size)), dims)
+
+#         self.decoder_blocks = nn.ModuleList([
+#             Block(dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=nn.LayerNorm,
+#                   proj_drop=0.1, attn_drop=0.1) for _ in range(depth)])
+#         self.pos_embedding = nn.Parameter(torch.from_numpy(pos_embedding).float().unsqueeze(0), requires_grad=False)
+
+#         if dims == 2:
+#             self.to_pixel = nn.Sequential(
+#                 Rearrange('b (h w) c -> b c h w', h=image_size[0] // patch_size[0]),
+#                 nn.ConvTranspose2d(dim, channels, kernel_size=patch_size, stride=patch_size)
+#             )
+#         elif dims == 3:
+#             self.to_pixel = nn.Sequential(
+#                 Rearrange('b (d h w) c -> b c d h w', d=image_size[0] // patch_size[0]),
+#                 nn.ConvTranspose3d(dim, channels, kernel_size=patch_size, stride=patch_size)
+#             )
+#         else:
+#             raise ValueError("dims must be 2 or 3.")
+
+#         self.apply(init_weights)
+
+#     def forward(self, token: torch.FloatTensor) -> torch.FloatTensor:
+#         x = token + self.pos_embedding
+#         for block in self.decoder_blocks:
+#             x = block(x)
+#         x = self.to_pixel(x)
+#         return x
+
+#     def get_last_layer(self) -> nn.Parameter:
+#         return self.to_pixel[-1].weight

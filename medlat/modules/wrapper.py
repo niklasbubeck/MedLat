@@ -327,7 +327,12 @@ class GenWrapper(nn.Module):
 
         with torch.no_grad():
             quant, loss, info = self.fcn_encode(image)
-        self._quant_shape = quant.permute(0, 2, 3, 1).shape  # (B, H, W, C) for indices decoding later
+        # Cache the quant shape in channels-last form for the discrete +
+        # autoregressive routing only (vae_decode reads it via decode_code).
+        # movedim is dim-agnostic so it works for both 2D (B,C,H,W) and 3D
+        # (B,C,D,H,W) first stages.
+        if self.generator_type == "autoregressive" and self.first_stage_type == "discrete":
+            self._quant_shape = quant.movedim(1, -1).shape
 
         # Automatically determine scale_factor during the first scale_steps steps
         if self.training:

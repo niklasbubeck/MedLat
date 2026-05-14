@@ -90,6 +90,7 @@ class ResnetBlock(nn.Module):
         conv_shortcut=False,
         dropout,
         temb_channels=512,
+        num_groups=32,
         dims=2
     ):
         super().__init__()
@@ -100,13 +101,13 @@ class ResnetBlock(nn.Module):
         self.dims = dims
         conv_layer = get_conv_layer(dims)
 
-        self.norm1 = Normalize(in_channels)
+        self.norm1 = Normalize(in_channels, num_groups=num_groups)
         self.conv1 = conv_layer(
             in_channels, out_channels, kernel_size=3, stride=1, padding=1
         )
         if temb_channels > 0:
             self.temb_proj = torch.nn.Linear(temb_channels, out_channels)
-        self.norm2 = Normalize(out_channels)
+        self.norm2 = Normalize(out_channels, num_groups=num_groups)
         self.dropout = torch.nn.Dropout(dropout)
         self.conv2 = conv_layer(
             out_channels, out_channels, kernel_size=3, stride=1, padding=1
@@ -150,13 +151,13 @@ class ResnetBlock(nn.Module):
 
 
 class AttnBlock(nn.Module):
-    def __init__(self, in_channels, dims=2):
+    def __init__(self, in_channels, dims=2, num_groups=32):
         super().__init__()
         self.in_channels = in_channels
         self.dims = dims
         conv_layer = get_conv_layer(dims)
 
-        self.norm = Normalize(in_channels)
+        self.norm = Normalize(in_channels, num_groups=num_groups)
         self.q = conv_layer(
             in_channels, in_channels, kernel_size=1, stride=1, padding=0
         )
@@ -225,6 +226,7 @@ class Encoder(nn.Module):
         double_z=True,
         dims=2,
         ignore_mid_attn=False,
+        num_groups=32,
         **ignore_kwargs,
     ):
         super().__init__()
@@ -275,7 +277,8 @@ class Encoder(nn.Module):
                         out_channels=block_out,
                         temb_channels=self.temb_ch,
                         dropout=dropout,
-                        dims=dims
+                        dims=dims,
+                        num_groups=num_groups,
                     )
                 )
                 block_in = block_out
@@ -298,7 +301,8 @@ class Encoder(nn.Module):
             out_channels=block_in,
             temb_channels=self.temb_ch,
             dropout=dropout,
-            dims=dims
+            dims=dims,
+            num_groups=num_groups,
         )
         if not ignore_mid_attn:
             self.mid.attn_1 = AttnBlock(block_in, dims=dims)
@@ -307,11 +311,12 @@ class Encoder(nn.Module):
             out_channels=block_in,
             temb_channels=self.temb_ch,
             dropout=dropout,
-            dims=dims
+            dims=dims,
+            num_groups=num_groups,
         )
 
         # end
-        self.norm_out = Normalize(block_in)
+        self.norm_out = Normalize(block_in, num_groups=num_groups)
         self.conv_out = conv_layer(
             block_in,
             2 * z_channels if double_z else z_channels,
@@ -368,6 +373,7 @@ class Decoder(nn.Module):
         give_pre_end=False,
         dims=2,
         ignore_mid_attn=False,
+        num_groups=32,
         **ignore_kwargs,
     ):
         super().__init__()
@@ -424,7 +430,8 @@ class Decoder(nn.Module):
             out_channels=block_in,
             temb_channels=self.temb_ch,
             dropout=dropout,
-            dims=dims
+            dims=dims,
+            num_groups=num_groups,
         )
         if not ignore_mid_attn:
             self.mid.attn_1 = AttnBlock(block_in, dims=dims)
@@ -433,7 +440,8 @@ class Decoder(nn.Module):
             out_channels=block_in,
             temb_channels=self.temb_ch,
             dropout=dropout,
-            dims=dims
+            dims=dims,
+            num_groups=num_groups,
         )
 
         # upsampling
@@ -449,7 +457,8 @@ class Decoder(nn.Module):
                         out_channels=block_out,
                         temb_channels=self.temb_ch,
                         dropout=dropout,
-                        dims=dims
+                        dims=dims,
+                        num_groups=num_groups,
                     )
                 )
                 block_in = block_out
@@ -466,7 +475,7 @@ class Decoder(nn.Module):
             self.up.insert(0, up)  # prepend to get consistent order
 
         # end
-        self.norm_out = Normalize(block_in)
+        self.norm_out = Normalize(block_in, num_groups=num_groups)
         self.conv_out = conv_layer(
             block_in, out_ch, kernel_size=3, stride=1, padding=1
         )
