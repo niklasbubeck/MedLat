@@ -62,6 +62,7 @@ __all__ = [
     "QincoResidualQuantizer",
     "SoftVectorQuantizer",
     "DiVeQ",
+    "SFDiVeQ",
 ]
 
 
@@ -3306,5 +3307,331 @@ class DiVeQ(AbstractQuantizer):
             f"discard_threshold={self.discard_threshold}, "
             f"perturb_eps={self.perturb_eps}, "
             f"uniform_init={self.uniform_init}"
+        )
+
+
+@register_model(f"{_REGISTRY_PREFIX}sf_diveq",
+                paper_url="https://arxiv.org/pdf/2509.26469")
+class SFDiVeQ(AbstractQuantizer):
+    """SF-DiVeQ — Space-Filling Differentiable Vector Quantization.
+
+    Variant of :class:`DiVeQ` that replaces codebook replacement with a
+    space-filling curve construction. The codewords are ordered: index ``i``
+    and ``i+1`` are treated as adjacent vertices of a polyline, and during
+    training the quantizer interpolates along the segment between the
+    nearest pair (a "dithered" codebook). Training proceeds in three phases:
+
+    1. **Warmup pass-through** (``iter < skip_iters - avg_iters``) — quantizer
+       is a no-op; encoder/decoder learn an unquantized representation.
+    2. **Latent collection** (``skip_iters - avg_iters <= iter < skip_iters``) —
+       still pass-through, but encoder activations are pooled. At
+       ``iter == skip_iters - 1`` the pooled latents are sliced into ``n_e``
+       groups (along the batch axis) and each group's mean becomes the
+       initial codeword for that index, giving the codebook a built-in
+       ordering along the data manifold.
+    3. **Quantization** (``iter >= skip_iters``) — dithered interpolated
+       quantization with DiVeQ-style directional noise routing.
+
+    Eval mode uses segment-projection hard quantization (see the ``inference``
+    method in the original paper).
+
+    Args:
+        n_e: codebook cardinality (number of polyline vertices).
+        e_dim: embedding dimension.
+        noise_var: std-dev of the directional noise (paper convention).
+        skip_iters: training-step count at which quantization activates.
+            Recommended > 1000.
+        avg_iters: number of warmup steps over which to pool latents for
+            codebook initialisation. Recommended 50–100.
+        uniform_init: uniform vs. normal pre-init scaled by ``1/n_e``.
+        allow_warning: emit ``UserWarning``s for out-of-range hyperparameters.
+        latents_on_cpu: pool latents on CPU during collection to save GPU
+            memory (recommended for large feature maps / batch sizes).
+    """
+
+    def __init__(
+        self,
+        n_e: int,
+        e_dim: int,
+        noise_var: float = 0.001,
+        skip_iters: int = 1000,
+        avg_iters: int = 50,
+        uniform_init: bool = True,
+        allow_warning: bool = True,
+        latents_on_cpu: bool = False,
+    ):
+        super().__init__()
+        self.n_e = n_e
+        self.e_dim = e_dim
+        self.noise_var = noise_var
+        self.skip_iters = skip_iters
+        self.avg_iters = avg_iters
+        self.uniform_init = uniform_init
+        self.allow_warning = allow_warning
+        self.latents_on_cpu = latents_on_cpu
+
+        self._check_constraints()
+        if allow_warning:
+            self._emit_constructor_warnings()
+
+        if uniform_init:
+            codebook = torch.rand(n_e, e_dim) * (1.0 / n_e)
+        else:
+            codebook = torch.randn(n_e, e_dim) * (1.0 / n_e)
+        self.embedding = nn.Parameter(codebook)
+
+        # Persistent training-step counter so phase transitions survive
+        # checkpointing. Plain Python list for the transient latent pool —
+        # not registered (cleared after init) so it never touches state_dict.
+        self.register_buffer(
+            "iter_counter", torch.zeros(1, dtype=torch.int64)
+        )
+        self.latent_list: List[torch.Tensor] = []
+
+    # ------------------------------------------------------------------
+    def forward(self, z: torch.Tensor):
+        """Quantize ``z`` and return ``(z_q, loss, indices)``.
+
+        ``loss`` is a zero scalar — SF-DiVeQ has no auxiliary loss.
+        Training drives the three-phase pipeline; eval uses
+        segment-projection hard quantization.
+        """
+        z = z.float()
+        z = flatten_spatial_to_channel_last(z, contiguous=True)
+        flat_shape = z.shape
+        z_flat = z.reshape(-1, self.e_dim)
+
+        if not self.training:
+            # Eval / inference path — segment-projection hard quantization.
+            z_q_flat, indices = self._segment_project(z_flat)
+            z_q = z_q_flat.view(flat_shape)
+            z_q = unflatten_spatial_to_channel_first(z_q, contiguous=True)
+            loss = torch.zeros((), device=z_q.device, dtype=z_q.dtype)
+            return z_q, loss, indices
+
+        # ── Training path ────────────────────────────────────────────────
+        with torch.no_grad():
+            self.iter_counter += 1
+        step = int(self.iter_counter.item())
+
+        loss = torch.zeros((), device=z_flat.device, dtype=z_flat.dtype)
+
+        if step < self.skip_iters:
+            # Phases 1 & 2: pass-through. Optionally pool latents for the
+            # init step. The placeholder index tensor keeps the framework's
+            # post-forward hook well-typed (and the perplexity it derives
+            # will be ~1.0, a clear "warmup" signal in the logs).
+            if step >= (self.skip_iters - self.avg_iters):
+                pooled = z_flat.detach()
+                if self.latents_on_cpu:
+                    pooled = pooled.cpu()
+                self.latent_list.append(pooled)
+                if step == (self.skip_iters - 1):
+                    self._init_codebook_from_pool(target_device=z_flat.device)
+
+            z_q = z_flat.view(flat_shape)
+            z_q = unflatten_spatial_to_channel_first(z_q, contiguous=True)
+            indices = torch.zeros(
+                z_flat.shape[0], device=z_flat.device, dtype=torch.int64
+            )
+            self.log_metric("info/quantizer/sf_diveq_active", 0.0)
+            return z_q, loss, indices
+
+        # Phase 3: dithered interpolated quantization.
+        dithered, dither = self._generate_dithered_codebook(z_flat.device)
+        # Distances against the dithered codebook (n_e - 1 segment points).
+        distances = (
+            z_flat.pow(2).sum(dim=1, keepdim=True)
+            + dithered.pow(2).sum(dim=1)
+            - 2 * (z_flat @ dithered.t())
+        )
+        indices = torch.argmin(distances, dim=1)
+
+        cb = self.embedding
+        c_first = cb[indices]
+        c_second = cb[indices + 1]
+        interp_lambda = dither[indices]  # (N, 1)
+
+        # Directional-noise surrogate routed independently along the two
+        # segment endpoints, then summed and detached so gradient through
+        # ``z_q`` is identity w.r.t. ``z_flat``.
+        direction_first = c_first - z_flat
+        direction_second = c_second - z_flat
+        noise1 = torch.randn_like(z_flat) * self.noise_var + direction_first
+        noise2 = torch.randn_like(z_flat) * self.noise_var + direction_second
+        norm1 = noise1 / torch.linalg.norm(noise1, dim=1, keepdim=True).clamp_min(1e-12)
+        norm2 = noise2 / torch.linalg.norm(noise2, dim=1, keepdim=True).clamp_min(1e-12)
+
+        mag1 = torch.linalg.norm(direction_first, dim=1, keepdim=True)
+        mag2 = torch.linalg.norm(direction_second, dim=1, keepdim=True)
+        vq_error1 = mag1 * ((1.0 - interp_lambda) * norm1).detach()
+        vq_error2 = mag2 * (interp_lambda * norm2).detach()
+        z_q_flat = z_flat + vq_error1 + vq_error2
+
+        self.log_metric("info/quantizer/sf_diveq_active", 1.0)
+        if distances.size(1) >= 2:
+            with torch.no_grad():
+                top2 = torch.topk(distances, 2, dim=1, largest=False).values
+                self.log_metric(
+                    "info/quantizer/assignment_margin",
+                    (top2[:, 1] - top2[:, 0]).mean(),
+                )
+
+        z_q = z_q_flat.view(flat_shape)
+        z_q = unflatten_spatial_to_channel_first(z_q, contiguous=True)
+        return z_q, loss, indices
+
+    # ------------------------------------------------------------------
+    def get_codebook_entry(self, indices: torch.Tensor, shape: Optional[Tuple[int, ...]] = None) -> torch.Tensor:
+        z_q = self.embedding[indices]
+        if shape is not None:
+            z_q = z_q.view(shape)
+        return z_q
+
+    # ---------------- Internals ----------------
+    def _check_constraints(self) -> None:
+        if self.noise_var <= 0.0:
+            raise ValueError(
+                "`noise_var` must be a positive float; recommended < 1e-2."
+            )
+        if self.skip_iters < 0:
+            raise ValueError(
+                "`skip_iters` must be a non-negative integer; recommended > 1000."
+            )
+        if self.avg_iters < 0:
+            raise ValueError(
+                "`avg_iters` must be a non-negative integer; recommended 50–100."
+            )
+        if self.avg_iters > self.skip_iters:
+            raise ValueError("`avg_iters` must be ≤ `skip_iters`.")
+
+    def _emit_constructor_warnings(self) -> None:
+        if self.noise_var > 0.01:
+            warnings.warn(
+                f"`noise_var`={self.noise_var} is large; values > 0.01 may"
+                f" overshoot nearest-neighbor mapping.",
+                UserWarning,
+            )
+        if self.skip_iters < 1000:
+            warnings.warn(
+                f"`skip_iters`={self.skip_iters} is small; set it large"
+                f" enough for the latent space to settle before quantising.",
+                UserWarning,
+            )
+        if self.avg_iters < 50:
+            warnings.warn(
+                f"`avg_iters`={self.avg_iters} is small; values < 50 yield a"
+                f" small latent pool for codebook init.",
+                UserWarning,
+            )
+        elif self.avg_iters > 100:
+            warnings.warn(
+                f"`avg_iters`={self.avg_iters} is large; values > 100 risk"
+                f" pooling out-of-date latents for codebook init.",
+                UserWarning,
+            )
+
+    def _generate_dithered_codebook(
+        self, device: torch.device
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Build a per-step interpolated codebook of size ``n_e - 1``.
+
+        Each segment endpoint pair ``(c_i, c_{i+1})`` is randomly dithered
+        with ``λ ∈ U(0, 1)``; ``λ`` is also returned for use in the
+        directional-noise routing during quantization.
+        """
+        dither = torch.rand((self.n_e - 1, 1), device=device)
+        idx = torch.arange(self.n_e - 1, device=device, dtype=torch.long)
+        c1 = self.embedding[idx]
+        c2 = self.embedding[idx + 1]
+        dithered = (1.0 - dither) * c1 + dither * c2
+        return dithered, dither
+
+    @torch.no_grad()
+    def _init_codebook_from_pool(self, target_device: torch.device) -> None:
+        """Set the codebook by averaging the pooled latents into ``n_e`` bins.
+
+        Called exactly once, on the final warmup step (``iter == skip_iters
+        - 1``). Frees the latent pool afterwards.
+        """
+        if not self.latent_list:
+            return
+        stacked = torch.cat(self.latent_list, dim=0)
+        n_total = stacked.shape[0]
+        hop = max(int(math.floor(n_total / self.n_e)), 1)
+        new_codebook = torch.zeros(
+            self.n_e, self.e_dim,
+            device=stacked.device, dtype=self.embedding.dtype,
+        )
+        for j in range(self.n_e):
+            start = j * hop
+            end = start + hop
+            chunk = stacked[start:end]
+            if chunk.numel() == 0:
+                # Pool too small to fill every bin — fall back to the last
+                # available slice rather than leaving zeros.
+                chunk = stacked[-hop:]
+            new_codebook[j] = chunk.mean(dim=0)
+        self.embedding.data = new_codebook.to(target_device).clone()
+        # Free pool memory — it's transient warmup state.
+        self.latent_list = []
+        self.log_metric(
+            "info/quantizer/sf_diveq_codebook_initialized", 1.0
+        )
+
+    def _segment_project(
+        self, z_flat: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Hard quantization: project ``z`` onto the polyline through the codebook.
+
+        Picks the nearest vertex, evaluates the two adjacent segments
+        (``[v-1, v]`` and ``[v, v+1]``), and returns the closer projection
+        clamped to the segment endpoints.
+        """
+        cb = self.embedding
+        n_e = self.n_e
+
+        with torch.no_grad():
+            distances = (
+                z_flat.pow(2).sum(dim=1, keepdim=True)
+                + cb.pow(2).sum(dim=1)
+                - 2.0 * (z_flat @ cb.t())
+            )
+            indices = torch.argmin(distances, dim=1)
+
+            # Two adjacent segments need ``idx-1`` and ``idx+1`` to exist.
+            idx_c = indices.clamp(min=1, max=n_e - 2)
+            cm = cb[idx_c - 1]
+            cc = cb[idx_c]
+            cp = cb[idx_c + 1]
+
+            t_m = (((cc - cm) * (z_flat - cm)).sum(dim=1)
+                   / (cc - cm).pow(2).sum(dim=1).clamp_min(1e-12)).unsqueeze(-1).clamp(0.0, 1.0)
+            t_p = (((cp - cc) * (z_flat - cc)).sum(dim=1)
+                   / (cp - cc).pow(2).sum(dim=1).clamp_min(1e-12)).unsqueeze(-1).clamp(0.0, 1.0)
+
+            z_m = (1.0 - t_m) * cm + t_m * cc
+            z_p = (1.0 - t_p) * cc + t_p * cp
+            d_m = (z_flat - z_m).pow(2).sum(dim=1)
+            d_p = (z_flat - z_p).pow(2).sum(dim=1)
+            offset = (d_p < d_m).to(torch.int64) - 1   # -1 or 0
+
+            c1 = cb[idx_c + offset]
+            c2 = cb[idx_c + offset + 1]
+            t = (((c2 - c1) * (z_flat - c1)).sum(dim=1)
+                 / (c2 - c1).pow(2).sum(dim=1).clamp_min(1e-12)).clamp(0.0, 1.0)
+            z_q = c1 + t.unsqueeze(-1) * (c2 - c1)
+            # Use the boundary-clamped index for downstream logging so the
+            # framework's perplexity / usage stats see a valid bin id.
+            return z_q, idx_c
+
+    def extra_repr(self) -> str:
+        return (
+            f"n_e={self.n_e}, e_dim={self.e_dim}, "
+            f"noise_var={self.noise_var}, "
+            f"skip_iters={self.skip_iters}, "
+            f"avg_iters={self.avg_iters}, "
+            f"uniform_init={self.uniform_init}, "
+            f"latents_on_cpu={self.latents_on_cpu}"
         )
 

@@ -1186,6 +1186,121 @@ def DiVeQ_f16_d8_e16384(
     return VQModel(encoder, decoder, quantizer, **kwargs)
 
 
+@register_model("discrete.sf_diveq.f4_d3_e8192", paper_url="https://arxiv.org/pdf/2509.26469")
+def SFDiVeQ_f4_d3_e8192(
+        # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=3,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[],
+        dropout=0.0,
+        # --- quantizer config ---
+        n_e=8192,
+        e_dim=3,
+        noise_var=0.001,
+        skip_iters=1000,
+        avg_iters=50,
+        uniform_init=True,
+        latents_on_cpu=False,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    decoder = Decoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    quantizer = SFDiVeQ(
+        n_e=n_e, e_dim=e_dim,
+        noise_var=noise_var,
+        skip_iters=skip_iters,
+        avg_iters=avg_iters,
+        uniform_init=uniform_init,
+        latents_on_cpu=latents_on_cpu,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
+@register_model("discrete.sf_diveq.f8_d4_e16384", paper_url="https://arxiv.org/pdf/2509.26469")
+def SFDiVeQ_f8_d4_e16384(
+        img_size=256, dims=2, double_z=False,
+        z_channels=4, in_channels=3, out_ch=3,
+        ch=128, ch_mult=[1, 2, 2, 4], num_res_blocks=2,
+        attn_resolutions=[32], dropout=0.0,
+        n_e=16384, e_dim=4,
+        noise_var=0.001, skip_iters=1000, avg_iters=50,
+        uniform_init=True, latents_on_cpu=False,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    decoder = Decoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    quantizer = SFDiVeQ(
+        n_e=n_e, e_dim=e_dim,
+        noise_var=noise_var,
+        skip_iters=skip_iters,
+        avg_iters=avg_iters,
+        uniform_init=uniform_init,
+        latents_on_cpu=latents_on_cpu,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
+@register_model("discrete.sf_diveq.f16_d8_e16384", paper_url="https://arxiv.org/pdf/2509.26469")
+def SFDiVeQ_f16_d8_e16384(
+        img_size=256, dims=2, double_z=False,
+        z_channels=8, in_channels=3, out_ch=3,
+        ch=128, ch_mult=[1, 1, 2, 2, 4], num_res_blocks=2,
+        attn_resolutions=[16], dropout=0.0,
+        n_e=16384, e_dim=8,
+        noise_var=0.001, skip_iters=1000, avg_iters=50,
+        uniform_init=True, latents_on_cpu=False,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    decoder = Decoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    quantizer = SFDiVeQ(
+        n_e=n_e, e_dim=e_dim,
+        noise_var=noise_var,
+        skip_iters=skip_iters,
+        avg_iters=avg_iters,
+        uniform_init=uniform_init,
+        latents_on_cpu=latents_on_cpu,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
 @register_model("discrete.fsq.f4_d3_l8192")
 def FSQ_f4_d3_l8192(
         # --- encoder/decoder config (IDENTICAL) ---
