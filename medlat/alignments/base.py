@@ -11,43 +11,36 @@ from .losses import AlignmentLoss, CosineSimilarityLoss
 
 
 class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
-    """Unified base class for auxiliary alignment modules.
+    """Almighty ABC for all alignment modules.
 
-    Handles the full alignment pipeline centrally:
+    Handles the shared alignment pipeline:
 
     1. **Input normalisation** — an optional ``input_transform`` (any
        ``nn.Module``) is applied to the raw image before the teacher
-       model sees it.  Pass ``_Normalize(mean, std)`` for ImageNet
-       stats, ``nn.Sequential(_Denormalize(...), _Normalize(...))``
-       for CLIP-style re-normalisation, or a custom module for
-       medical-imaging datasets.
-    2. **Decoder pipeline** — when a ``decoder`` is provided the base
-       class builds ``post_quant_conv → decoder → to_pixel`` and uses
-       it in ``decode_projection``.  Without a decoder the quantised
-       tokens are returned as-is (subclasses may override).
+       model sees it.
+    2. **Composable losses** — ``losses`` is a list of
+       ``(AlignmentLoss, weight)`` tuples.  The base ``forward``
+       computes the weighted sum and logs each component.
     3. **Spatial alignment** — if the predicted and target token
        sequences have different lengths the base class reshapes them
        to square grids and aligns them using ``spatial_mode``
        (``"bilinear"`` | ``"avgpool"`` | ``"maxpool"``).  Masks are
        always aligned with nearest-neighbour interpolation.
-    4. **Composable losses** — ``losses`` is a list of
-       ``(AlignmentLoss, weight)`` tuples.  The base ``forward``
-       computes the weighted sum and logs ``"alignment_loss"``.
 
-    Subclasses must implement :meth:`compute_target` and may
-    optionally override :meth:`decode_projection`.
+    Subclasses must implement :meth:`compute_target` and
+    :meth:`decode_projection`.
 
-    **Decoder interface contract** — decoders must conform to::
+    Two intermediate base classes provide the projection logic:
 
-        decoder(x, interpolate_zq, H, W, D) -> Tensor  # (B, L, embed_dim)
+    - :class:`TokenizerAlignment` — for tokenizer/VAE-space alignment
+      (Axis A), with an optional decoder pipeline.
+    - :class:`GeneratorAlignment` — for generator-space alignment
+      (Axis B), with an MLP projection head.
     """
 
     def __init__(
         self,
         name: str,
-        decoder: Optional[nn.Module] = None,
-        codebook_embed_dim: Optional[int] = None,
-        target_dim: Optional[int] = None,
         input_transform: Optional[nn.Module] = None,
         spatial_mode: str = "bilinear",
         losses: Optional[List[Tuple[AlignmentLoss, float]]] = None,
@@ -55,21 +48,6 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
         super().__init__()
         self.name = name
         self.spatial_mode = spatial_mode
-
-        if decoder is not None:
-            if codebook_embed_dim is None or target_dim is None:
-                raise ValueError(
-                    "codebook_embed_dim and target_dim are required "
-                    "when a decoder is provided"
-                )
-            self.decoder = decoder
-            self.post_quant_conv = nn.Linear(codebook_embed_dim, decoder.embed_dim)
-            self.to_pixel = nn.Linear(decoder.embed_dim, target_dim)
-        else:
-            self.decoder = None
-            self.post_quant_conv = None
-            self.to_pixel = None
-
         self.input_transform = input_transform
 
         if losses is None:
@@ -87,20 +65,14 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
         """
         ...
 
+    @abstractmethod
     def decode_projection(self, quant: torch.Tensor) -> torch.Tensor:
-        """Project quantised tokens to the target feature space.
+        """Project input representations to the target feature space."""
+        ...
 
-        When a decoder was provided at construction the default
-        implementation converts to ``(B, L, D)`` tokens then runs
-        ``post_quant_conv → decoder → to_pixel``.
-        Without a decoder it returns ``quant`` unchanged.
-        """
-        if self.decoder is not None:
-            quant = self._to_tokens(quant)
-            x = self.post_quant_conv(quant)
-            dec = self.decoder(x, interpolate_zq=None, H=None, W=None, D=None)
-            return self.to_pixel(dec)
-        return quant
+    def ensure_projection_dim(self, target_dim: int):
+        """Override in subclasses that need dynamic projection resizing."""
+        pass
 
     # ------------------------------------------------------------------ #
     # Forward
@@ -168,14 +140,6 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
             return x.permute(0, 2, 3, 1).reshape(b, h * w, c)
         raise ValueError(f"Expected 3D (B, L, D) or 4D (B, C, H, W), got {x.dim()}D")
 
-    def ensure_projection_dim(self, target_dim: int):
-        if self.to_pixel is not None and self.to_pixel.out_features != target_dim:
-            requires_grad = self.to_pixel.weight.requires_grad
-            self.to_pixel = nn.Linear(
-                self.decoder.embed_dim, target_dim,
-            ).to(self.to_pixel.weight.device)
-            self.to_pixel.requires_grad_(requires_grad)
-
     def _infer_grid_hw(self, seq_len: int) -> Tuple[int, int]:
         side = int(math.sqrt(seq_len))
         if side * side != seq_len:
@@ -214,3 +178,104 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
         mask_map = mask.view(b, ph, pw, c).permute(0, 3, 1, 2)
         mask_map = F.interpolate(mask_map, size=(th, tw), mode='nearest')
         return mask_map.permute(0, 2, 3, 1).reshape(b, lt, c)
+
+
+# ====================================================================== #
+# Intermediate base classes
+# ====================================================================== #
+
+
+class TokenizerAlignment(AlignmentModule):
+    """Base class for tokenizer-space (Axis A) alignments.
+
+    Adds an optional decoder pipeline:
+    ``post_quant_conv → decoder → to_pixel``.
+
+    Without a decoder the quantised tokens are returned as-is from
+    :meth:`decode_projection` (subclasses may override).
+
+    **Decoder interface contract**::
+
+        decoder(x, interpolate_zq, H, W, D) -> Tensor  # (B, L, embed_dim)
+    """
+
+    def __init__(
+        self,
+        name: str,
+        decoder: Optional[nn.Module] = None,
+        codebook_embed_dim: Optional[int] = None,
+        target_dim: Optional[int] = None,
+        input_transform: Optional[nn.Module] = None,
+        spatial_mode: str = "bilinear",
+        losses: Optional[List[Tuple[AlignmentLoss, float]]] = None,
+    ):
+        super().__init__(
+            name=name,
+            input_transform=input_transform,
+            spatial_mode=spatial_mode,
+            losses=losses,
+        )
+
+        if decoder is not None:
+            if codebook_embed_dim is None or target_dim is None:
+                raise ValueError(
+                    "codebook_embed_dim and target_dim are required "
+                    "when a decoder is provided"
+                )
+            self.decoder = decoder
+            self.post_quant_conv = nn.Linear(codebook_embed_dim, decoder.embed_dim)
+            self.to_pixel = nn.Linear(decoder.embed_dim, target_dim)
+        else:
+            self.decoder = None
+            self.post_quant_conv = None
+            self.to_pixel = None
+
+    def decode_projection(self, quant: torch.Tensor) -> torch.Tensor:
+        if self.decoder is not None:
+            quant = self._to_tokens(quant)
+            x = self.post_quant_conv(quant)
+            dec = self.decoder(x, interpolate_zq=None, H=None, W=None, D=None)
+            return self.to_pixel(dec)
+        return quant
+
+    def ensure_projection_dim(self, target_dim: int):
+        if self.to_pixel is not None and self.to_pixel.out_features != target_dim:
+            requires_grad = self.to_pixel.weight.requires_grad
+            self.to_pixel = nn.Linear(
+                self.decoder.embed_dim, target_dim,
+            ).to(self.to_pixel.weight.device)
+            self.to_pixel.requires_grad_(requires_grad)
+
+
+class GeneratorAlignment(AlignmentModule):
+    """Base class for generator-space (Axis B) alignments.
+
+    Adds an MLP projection head that maps generator hidden states
+    to the teacher feature space.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        hidden_dim: int,
+        target_dim: int,
+        input_transform: Optional[nn.Module] = None,
+        spatial_mode: str = "bilinear",
+        losses: Optional[List[Tuple[AlignmentLoss, float]]] = None,
+        proj_depth: int = 2,
+    ):
+        super().__init__(
+            name=name,
+            input_transform=input_transform,
+            spatial_mode=spatial_mode,
+            losses=losses,
+        )
+
+        layers = []
+        for _ in range(proj_depth - 1):
+            layers.extend([nn.Linear(hidden_dim, hidden_dim), nn.GELU()])
+        layers.append(nn.Linear(hidden_dim, target_dim))
+        self.projection = nn.Sequential(*layers)
+
+    def decode_projection(self, quant: torch.Tensor) -> torch.Tensor:
+        return self.projection(self._to_tokens(quant))

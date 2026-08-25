@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .base import AlignmentModule
-from .losses import AlignmentLoss
+from .base import TokenizerAlignment
 from .utils import HOGGenerator, _Normalize, _Denormalize
 
 try:
@@ -17,7 +16,7 @@ except ImportError:
 # HOG
 # ---------------------------------------------------------------------------
 
-class HOGAlignment(AlignmentModule):
+class HOGAlignment(TokenizerAlignment):
 
     def __init__(
         self,
@@ -42,7 +41,7 @@ class HOGAlignment(AlignmentModule):
 # DINO
 # ---------------------------------------------------------------------------
 
-class DinoAlignment(AlignmentModule):
+class DinoAlignment(TokenizerAlignment):
 
     def __init__(
         self,
@@ -87,7 +86,7 @@ class DinoAlignment(AlignmentModule):
 # CLIP
 # ---------------------------------------------------------------------------
 
-class ClipAlignment(AlignmentModule):
+class ClipAlignment(TokenizerAlignment):
 
     def __init__(
         self,
@@ -133,7 +132,7 @@ class ClipAlignment(AlignmentModule):
 # MAE
 # ---------------------------------------------------------------------------
 
-class MAEAlignment(AlignmentModule):
+class MAEAlignment(TokenizerAlignment):
 
     def __init__(
         self,
@@ -174,7 +173,7 @@ class MAEAlignment(AlignmentModule):
 # BiomedCLIP
 # ---------------------------------------------------------------------------
 
-class BiomedClipAlignment(AlignmentModule):
+class BiomedClipAlignment(TokenizerAlignment):
 
     def __init__(
         self,

@@ -3,8 +3,9 @@ medlat.alignments — alignment module package.
 
     from medlat.alignments import AlignmentModule, HOGAlignment, DinoAlignment
     from medlat.alignments import CosineSimilarityLoss, DistmatMarginLoss
+    from medlat.alignments import TokenizerAlignment, GeneratorAlignment
 """
-from .base import AlignmentModule
+from .base import AlignmentModule, TokenizerAlignment, GeneratorAlignment
 from .losses import (
     AlignmentLoss,
     CosineSimilarityLoss,
@@ -13,7 +14,7 @@ from .losses import (
     DistmatMarginLoss,
     CosineMarginLoss,
 )
-from .alignments import (
+from .tokenizer_alignments import (
     HOGAlignment,
     DinoAlignment,
     ClipAlignment,
@@ -24,6 +25,8 @@ from .utils import mean_flat, _Normalize, _Denormalize, HOGGenerator, IdentityDe
 
 __all__ = [
     "AlignmentModule",
+    "TokenizerAlignment",
+    "GeneratorAlignment",
     "AlignmentLoss",
     "CosineSimilarityLoss",
     "MSEAlignmentLoss",
