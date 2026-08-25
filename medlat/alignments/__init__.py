@@ -17,10 +17,10 @@ from .alignments import (
     HOGAlignment,
     DinoAlignment,
     ClipAlignment,
-    VFFoundationAlignment,
-    FoundationFeatureExtractor,
+    MAEAlignment,
+    BiomedClipAlignment,
 )
-from .utils import mean_flat, _Normalize, _Denormalize, HOGGenerator
+from .utils import mean_flat, _Normalize, _Denormalize, HOGGenerator, IdentityDecoder
 
 __all__ = [
     "AlignmentModule",
@@ -34,9 +34,10 @@ __all__ = [
     "HOGGenerator",
     "DinoAlignment",
     "ClipAlignment",
-    "VFFoundationAlignment",
-    "FoundationFeatureExtractor",
+    "MAEAlignment",
+    "BiomedClipAlignment",
     "mean_flat",
+    "IdentityDecoder",
     "_Normalize",
     "_Denormalize",
 ]

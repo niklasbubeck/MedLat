@@ -244,7 +244,7 @@ def MedVAE_f8_d16(
     encoder = LDMEncoder(img_size=img_size, dims=dims, double_z=double_z, z_channels=z_channels, in_channels=in_channels, out_ch=out_ch, ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout)
     decoder = LDMDecoder(img_size=img_size, dims=dims, double_z=double_z, z_channels=z_channels, in_channels=in_channels, out_ch=out_ch, ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout)
 
-    alignment = VFFoundationAlignment(latent_channels=z_channels, foundation_type="biomedclip")
+    alignment = BiomedClipAlignment(decoder=IdentityDecoder(z_channels), codebook_embed_dim=z_channels, losses=[(DistmatMarginLoss(margin=0.25), 1.0), (CosineMarginLoss(margin=0.5), 1.0)])
     return AutoencoderKL(encoder=encoder, decoder=decoder, alignment=alignment, **kwargs)
 
 
@@ -277,7 +277,7 @@ def VAVAE_f8_d16_dinov2(
     encoder = LDMEncoder(img_size=img_size, dims=dims, double_z=double_z, z_channels=z_channels, in_channels=in_channels, out_ch=out_ch, ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout)
     decoder = LDMDecoder(img_size=img_size, dims=dims, double_z=double_z, z_channels=z_channels, in_channels=in_channels, out_ch=out_ch, ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout)
 
-    alignment = VFFoundationAlignment(latent_channels=z_channels, foundation_type="dinov2")
+    alignment = DinoAlignment(decoder=IdentityDecoder(z_channels), codebook_embed_dim=z_channels, losses=[(DistmatMarginLoss(margin=0.25), 1.0), (CosineMarginLoss(margin=0.5), 1.0)])
     return AutoencoderKL(encoder=encoder, decoder=decoder, alignment=alignment, **kwargs)
 
 
@@ -306,7 +306,7 @@ def VAVAE_f16_d16_mae(
     encoder = LDMEncoder(img_size=img_size, dims=dims, double_z=double_z, z_channels=z_channels, in_channels=in_channels, out_ch=out_ch, ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout)
     decoder = LDMDecoder(img_size=img_size, dims=dims, double_z=double_z, z_channels=z_channels, in_channels=in_channels, out_ch=out_ch, ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout)
 
-    alignment = VFFoundationAlignment(latent_channels=z_channels, foundation_type="mae")
+    alignment = MAEAlignment(decoder=IdentityDecoder(z_channels), codebook_embed_dim=z_channels, losses=[(DistmatMarginLoss(margin=0.25), 1.0), (CosineMarginLoss(margin=0.5), 1.0)])
     return AutoencoderKL(encoder=encoder, decoder=decoder, alignment=alignment, **kwargs)
 
 @register_model(f"continuous.vavae.f16_d32_mae",
@@ -372,7 +372,7 @@ def VAVAE_f16_d16_dinov2(
     encoder = LDMEncoder(img_size=img_size, dims=dims, double_z=double_z, z_channels=z_channels, in_channels=in_channels, out_ch=out_ch, ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout)
     decoder = LDMDecoder(img_size=img_size, dims=dims, double_z=double_z, z_channels=z_channels, in_channels=in_channels, out_ch=out_ch, ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks, attn_resolutions=attn_resolutions, dropout=dropout)
 
-    alignment = VFFoundationAlignment(latent_channels=z_channels, foundation_type="dinov2")
+    alignment = DinoAlignment(decoder=IdentityDecoder(z_channels), codebook_embed_dim=z_channels, losses=[(DistmatMarginLoss(margin=0.25), 1.0), (CosineMarginLoss(margin=0.5), 1.0)])
     return AutoencoderKL(encoder=encoder, decoder=decoder, alignment=alignment, **kwargs)
 
 @register_model(f"continuous.vavae.f16_d32_dinov2",

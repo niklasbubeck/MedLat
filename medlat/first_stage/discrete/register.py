@@ -2526,7 +2526,7 @@ def SoftVQ_f8_d16_e16384_dinov2(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = VFFoundationAlignment(latent_channels=z_channels, foundation_type="dinov2")
+    alignment = DinoAlignment(decoder=IdentityDecoder(z_channels), codebook_embed_dim=z_channels, losses=[(DistmatMarginLoss(margin=0.25), 1.0), (CosineMarginLoss(margin=0.5), 1.0)])
     return VQModel(encoder, decoder, quantizer, alignment=alignment, **kwargs)
 
 @register_model(f"continuous.soft_vq.f8_d32_e16384_dinov2")
@@ -2592,7 +2592,7 @@ def SoftVQ_f8_d16_e16384_biomedclip(
         tau=tau,    
         use_norm=use_norm,
     )
-    alignment = VFFoundationAlignment(latent_channels=z_channels, foundation_type="biomedclip")
+    alignment = BiomedClipAlignment(decoder=IdentityDecoder(z_channels), codebook_embed_dim=z_channels, losses=[(DistmatMarginLoss(margin=0.25), 1.0), (CosineMarginLoss(margin=0.5), 1.0)])
     return VQModel(encoder, decoder, quantizer, alignment=alignment, **kwargs)
 
 

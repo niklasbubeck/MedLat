@@ -9,6 +9,22 @@ def mean_flat(x):
     return torch.mean(x, dim=list(range(1, len(x.size()))))
 
 
+class IdentityDecoder(nn.Module):
+    """Pass-through decoder for alignments that only need the projection layers.
+
+    Satisfies the decoder interface contract (``forward(x, interpolate_zq, H, W, D)``)
+    and exposes ``embed_dim`` so the base class can build ``post_quant_conv`` and
+    ``to_pixel`` around it.
+    """
+
+    def __init__(self, embed_dim: int):
+        super().__init__()
+        self.embed_dim = embed_dim
+
+    def forward(self, x, interpolate_zq=None, H=None, W=None, D=None):
+        return x
+
+
 class _Normalize(nn.Module):
     """Channel-wise normalisation: (x - mean) / std. Buffers stay on the correct device."""
     def __init__(self, mean, std):

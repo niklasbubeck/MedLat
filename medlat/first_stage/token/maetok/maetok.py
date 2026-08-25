@@ -182,7 +182,6 @@ class MaskAEModel(nn.Module):
             self.aux_hog_decoder = HOGAlignment(
                 decoder=aux_hog_decoder_model,
                 codebook_embed_dim=self.codebook_embed_dim,
-                use_movq=use_movq_hog,
             )
         
         self.aux_dino_decoder = None
@@ -216,7 +215,6 @@ class MaskAEModel(nn.Module):
                 img_size=self.img_size,
                 repa_model_name=self.repa_model,
                 repa_patch_size=self.repa_patch_size,
-                use_movq=use_movq_dino,
             )
         
         self.aux_clip_decoder = None
@@ -250,7 +248,6 @@ class MaskAEModel(nn.Module):
                 img_size=self.img_size,
                 clip_model_name='vit_so400m_patch14_siglip_gap_224',
                 clip_patch_size=self.repa_patch_size,
-                use_movq=use_movq_clip,
             )
             
         # self.aux_biomed_clip_decoder = self.aux_biomed_clip_dec

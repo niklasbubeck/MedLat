@@ -98,26 +98,35 @@ def test_infer_grid_hw_non_square_raises():
 
 
 # ---------------------------------------------------------------------------
-# VFFoundationAlignment (requires timm)
+# DinoAlignment with composable VF losses (requires timm)
 # ---------------------------------------------------------------------------
 
 @requires_timm
-def test_vf_foundation_alignment_constructs():
-    from medlat.alignments import VFFoundationAlignment
+def test_dino_alignment_with_vf_losses_constructs():
+    from medlat.alignments import DinoAlignment, DistmatMarginLoss, CosineMarginLoss
     decoder = _StubDecoder(embed_dim=64)
-    align = VFFoundationAlignment(
-        decoder=decoder, codebook_embed_dim=32, foundation_type="dinov2",
+    align = DinoAlignment(
+        decoder=decoder, codebook_embed_dim=32,
+        losses=[
+            (DistmatMarginLoss(margin=0.25), 1.0),
+            (CosineMarginLoss(margin=0.5), 1.0),
+        ],
     )
     assert align is not None
+    assert len(align.loss_modules) == 2
 
 
 @requires_timm
-def test_vf_foundation_alignment_forward_smoke():
-    """Smoke test: forward pass returns a scalar loss."""
-    from medlat.alignments import VFFoundationAlignment
+def test_dino_alignment_with_vf_losses_forward_smoke():
+    """Smoke test: forward pass with VF losses returns a scalar loss."""
+    from medlat.alignments import DinoAlignment, DistmatMarginLoss, CosineMarginLoss
     decoder = _StubDecoder(embed_dim=64)
-    align = VFFoundationAlignment(
-        decoder=decoder, codebook_embed_dim=32, foundation_type="dinov2",
+    align = DinoAlignment(
+        decoder=decoder, codebook_embed_dim=32, img_size=64,
+        losses=[
+            (DistmatMarginLoss(margin=0.25), 1.0),
+            (CosineMarginLoss(margin=0.5), 1.0),
+        ],
     )
     align.eval()
 

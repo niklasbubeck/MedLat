@@ -91,10 +91,12 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
         """Project quantised tokens to the target feature space.
 
         When a decoder was provided at construction the default
-        implementation runs ``post_quant_conv → decoder → to_pixel``.
+        implementation converts to ``(B, L, D)`` tokens then runs
+        ``post_quant_conv → decoder → to_pixel``.
         Without a decoder it returns ``quant`` unchanged.
         """
         if self.decoder is not None:
+            quant = self._to_tokens(quant)
             x = self.post_quant_conv(quant)
             dec = self.decoder(x, interpolate_zq=None, H=None, W=None, D=None)
             return self.to_pixel(dec)
@@ -135,10 +137,11 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
         elif mask is not None and mask.shape[1] != pred.shape[1]:
             mask = self._align_mask(mask, pred)
 
-        total_loss = sum(
-            w * fn(pred, target, mask)
-            for fn, w in zip(self.loss_modules, self.loss_weights)
-        )
+        total_loss = torch.zeros((), device=pred.device)
+        for fn, w in zip(self.loss_modules, self.loss_weights):
+            component = fn(pred, target, mask)
+            self.log_metric(f"alignment/{type(fn).__name__}", component.detach())
+            total_loss = total_loss + w * component
 
         self.log_metric("alignment_loss", total_loss.detach())
         return total_loss, pred
