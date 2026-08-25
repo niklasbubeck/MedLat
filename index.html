@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="x-ua-compatible" content="IE=edge" />
+
+  <!-- ═══ Primary SEO — title, description, keywords ═══ -->
+  <title>MedLat · PyTorch Library for Generative Imaging · DiT, MaskGIT, MAR, VQ-VAE, Flow Matching · 2D &amp; 3D</title>
+  <meta name="title" content="MedLat · PyTorch Library for Generative Imaging · DiT, MaskGIT, MAR, VQ-VAE, Flow Matching · 2D & 3D" />
+  <meta name="description" content="MedLat — plug-and-play PyTorch library for generative imaging. Diffusion Transformers (DiT, MDT, U-ViT), UNet diffusion (LDM, ADM), masked generators (MaskGIT, MAGE, MaskBit, Muse), continuous-AR (MAR, RAR, Fractal), autoencoders (AutoencoderKL, VA-VAE, MedVAE, DCAE), tokenizers (TiTok, MAETok, SoftVQ, VMAE), quantizers (VQ-VAE, LFQ, BSQ, FSQ, QINCo, RQ-VAE, SimVQ), and schedulers (GaussianDiffusion, FlowMatching, Self-Flow) — one registry. 2D and 3D. MIT licensed." />
+  <meta name="keywords" content="MedLat, medlat, PyTorch library, generative imaging, generative model registry, medical imaging AI, latent diffusion PyTorch, VAE PyTorch, autoencoder library, 3D medical imaging, radiology AI, pathology AI, CT generation, MRI generation, alignment module, denoising scheduler, PyTorch registry, plug and play AI, Niklas Bubeck, niklasbubeck, medical latent, latent generator, image generation library, generative AI, open source PyTorch, GenWrapper, Diffusion, Diffusion Transformer, DiffusionTransformer, DiT, DiTs, MDT, Masked Diffusion Transformer, U-ViT, UViT, UNet, UNetModel, ADM, LDM, Latent Diffusion Model, Stable Diffusion architecture, DDPM, DDIM, Gaussian Diffusion, GaussianDiffusion, Flow Matching, FlowMatching, FlowMatchingScheduler, Transport, Self-Flow, SelfFlow, DualTimestepScheduler, Rectified Flow, MaskGIT, MaskGit, MaskGitTransformer, MaskBit, LFQBert, MAGE, Muse, MAR, RAR, Fractal, FractalGen, VAR, Taming, Taming Transformers, Taming GPT, AutoencoderKL, AutoencoderKLTransformer, VAE, KL-VAE, VQ-VAE, VQ-GAN, VQGAN, VQModel, VQModelTransformer, VectorQuantizer, LFQ, Lookup-Free Quantization, BSQ, Binary Spherical Quantization, FSQ, Finite Scalar Quantization, QINCo, QincoResidualQuantizer, RQ-VAE, RQVAE, Residual Vector Quantizer, SimVQ, SoftVQ, SoftVectorQuantizer, HCVQ, MSRQ, Gumbel VQ, VA-VAE, VaVAE, MedVAE, MAISI, DCAE, DCAEEncoder, DCAEDecoder, TiTok, TiTokEncoder, TiTokDecoder, MAETok, MAETokViTEncoder, MAETokViTDecoder, VMAE, ViTA, DeTok, ReconMAE, ViT, Vision Transformer, BiomedCLIP, DINOv2, MAE, Vision-Foundation alignment, VF alignment, tokenizer registry, first-stage model, latent generator, generator backbone" />
+  <meta name="author" content="Niklas Bubeck" />
+  <meta name="publisher" content="Niklas Bubeck" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1" />
+  <meta name="bingbot" content="index, follow" />
+  <meta name="theme-color" content="#faf7f2" />
+  <meta name="color-scheme" content="light" />
+  <meta name="rating" content="general" />
+  <meta name="language" content="en" />
+  <meta http-equiv="content-language" content="en-us" />
+  <meta name="revisit-after" content="7 days" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <!-- ═══ Canonical, alternates, hreflang ═══ -->
+  <link rel="canonical" href="https://niklasbubeck.github.io/MedLat/" />
+  <link rel="alternate" hreflang="en" href="https://niklasbubeck.github.io/MedLat/" />
+  <link rel="alternate" hreflang="x-default" href="https://niklasbubeck.github.io/MedLat/" />
+  <link rel="alternate" type="text/markdown" href="https://github.com/niklasbubeck/MedLat/blob/main/README.md" title="README on GitHub" />
+  <link rel="alternate" type="text/plain" href="https://niklasbubeck.github.io/MedLat/llms.txt" title="LLM / agent summary" />
+  <link rel="alternate" type="application/atom+xml" href="https://github.com/niklasbubeck/MedLat/releases.atom" title="MedLat release feed" />
+  <link rel="help" href="https://github.com/niklasbubeck/MedLat/blob/main/README.md" />
+  <link rel="author" href="https://github.com/niklasbubeck" />
+  <link rel="sitemap" type="application/xml" href="/MedLat/sitemap.xml" />
+
+  <!-- ═══ Open Graph ═══ -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MedLat" />
+  <meta property="og:title" content="MedLat · PyTorch Library for Generative Imaging" />
+  <meta property="og:description" content="Plug-and-play PyTorch. Combine autoencoder, generator, alignment module, and denoising scheduler. 2D images and 3D medical volumes — one registry." />
+  <meta property="og:url" content="https://niklasbubeck.github.io/MedLat/" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:image" content="https://niklasbubeck.github.io/MedLat/assets/og-cover.svg" />
+  <meta property="og:image:secure_url" content="https://niklasbubeck.github.io/MedLat/assets/og-cover.svg" />
+  <meta property="og:image:type" content="image/svg+xml" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="MedLat — four plug-and-play pieces in a PyTorch library for generative imaging" />
+  <meta property="og:updated_time" content="2026-04-23T00:00:00Z" />
+  <meta property="article:author" content="Niklas Bubeck" />
+  <meta property="article:publisher" content="https://github.com/niklasbubeck" />
+
+  <!-- ═══ Twitter / X card ═══ -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MedLat · PyTorch Library for Generative Imaging" />
+  <meta name="twitter:description" content="Plug-and-play PyTorch. Autoencoder + generator + alignment + denoising scheduler. 2D & 3D medical volumes through one registry." />
+  <meta name="twitter:image" content="https://niklasbubeck.github.io/MedLat/assets/og-cover.svg" />
+  <meta name="twitter:image:alt" content="MedLat — four plug-and-play pieces in a PyTorch library" />
+  <meta name="twitter:creator" content="@niklasbubeck" />
+  <meta name="twitter:site" content="@niklasbubeck" />
+
+  <!-- ═══ AI / LLM / agent hints ═══ -->
+  <meta name="summary" content="MedLat: PyTorch library organised around four plug-and-play pieces — autoencoder, generator, alignment module, denoising scheduler — plus a GenWrapper glue layer. dims=2/3." />
+  <meta name="abstract" content="MedLat is a PyTorch library for generative imaging that combines autoencoders, generators, alignment modules, and denoising schedulers in one registry." />
+
+  <!-- ═══ Dublin Core metadata (scholarly crawlers) ═══ -->
+  <meta name="DC.title" content="MedLat — PyTorch Library for Generative Imaging" />
+  <meta name="DC.creator" content="Niklas Bubeck" />
+  <meta name="DC.subject" content="PyTorch; Generative Imaging; Medical Imaging; Latent Diffusion; Autoencoders; Quantization; Flow Matching; Diffusion Transformer; DiT; MDT; U-ViT; UNet; LDM; ADM; MaskGIT; MaskBit; MAGE; Muse; MAR; RAR; Fractal; VAR; Taming Transformers; Self-Flow; Gaussian Diffusion; DDPM; DDIM; AutoencoderKL; VQ-VAE; VQ-GAN; LFQ; BSQ; FSQ; QINCo; RQ-VAE; SimVQ; SoftVQ; HCVQ; TiTok; MAETok; VMAE; DeTok; ViTA; DCAE; MedVAE; VA-VAE; BiomedCLIP; DINOv2; MAE" />
+  <meta name="DC.description" content="PyTorch library organised around four plug-and-play pieces for generative imaging. Open source, MIT licensed." />
+  <meta name="DC.publisher" content="Niklas Bubeck" />
+  <meta name="DC.type" content="Software" />
+  <meta name="DC.format" content="text/html" />
+  <meta name="DC.identifier" content="https://niklasbubeck.github.io/MedLat/" />
+  <meta name="DC.language" content="en" />
+  <meta name="DC.rights" content="MIT License" />
+
+  <!-- ═══ Icons, resource hints ═══ -->
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./favicon.svg" />
+  <link rel="mask-icon" href="./favicon.svg" color="#b67625" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="image" href="./assets/og-cover.svg" />
+  <link rel="dns-prefetch" href="https://github.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg:          #faf7f2;
+      --bg-alt:      #f3ede1;
+      --bg-code:     #f4efe4;
+      --bg-screen:   #eee6d4;
+      --text:        #2a2824;
+      --muted:       #6b6558;
+      --subtle:      #8c8474;
+      --rule:        #e6dfd1;
+      --rule-strong: #d4c9b2;
+      --amber:       #b67625;
+      --amber-soft:  #d9a35a;
+      --forest:      #3e5c4a;
+      --claret:      #8a3a2e;
+
+      --radius: 4px;
+      --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+      --font-body:    "Inter", system-ui, -apple-system, sans-serif;
+      --font-mono:    "Fira Code", ui-monospace, "Cascadia Code", monospace;
+
+      --measure: 680px;
+      --measure-wide: 980px;
+      --measure-hero: 1120px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      font-size: 1.02rem;
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--bg);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: "ss01", "cv11";
+    }
+
+    ::selection { background: rgba(182, 118, 37, 0.22); color: var(--text); }
+
+    a {
+      color: var(--amber);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    a:hover, a:focus-visible { border-bottom-color: var(--amber); }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+      color: var(--forest);
+      background: rgba(62, 92, 74, 0.07);
+      padding: 0.08em 0.38em;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+
+    strong { font-weight: 600; color: var(--text); }
+    em { color: var(--forest); }
+
+    .skip-link {
+      position: absolute; left: -9999px; z-index: 9999;
+      padding: 0.75rem 1.25rem; background: var(--amber);
+      color: var(--bg); font-weight: 600; border-radius: 4px;
+    }
+    .skip-link:focus { left: 1rem; top: 1rem; }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    header.site {
+      padding: 1.4rem clamp(1.25rem, 5vw, 2.5rem);
+      display: flex; flex-wrap: wrap; align-items: center;
+      justify-content: space-between; gap: 1rem;
+      border-bottom: 1px solid var(--rule);
+      background: var(--bg);
+      position: sticky; top: 0; z-index: 20;
+    }
+    .brand {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.5rem;
+      letter-spacing: -0.015em;
+      text-decoration: none;
+      color: var(--text);
+      border-bottom: none;
+    }
+    .brand-med { color: var(--forest); }
+    .brand-lad { color: var(--amber); font-style: italic; }
+
+    nav.site-nav {
+      display: flex; flex-wrap: wrap; gap: 0.25rem 1.4rem;
+      font-size: 0.92rem; font-weight: 500;
+    }
+    nav.site-nav a {
+      color: var(--muted);
+      border-bottom: none;
+      padding: 0.25rem 0;
+      position: relative;
+    }
+    nav.site-nav a::after {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 1px;
+      background: var(--amber);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.2s ease;
+    }
+    nav.site-nav a:hover, nav.site-nav a:focus-visible { color: var(--text); }
+    nav.site-nav a:hover::after, nav.site-nav a:focus-visible::after { transform: scaleX(1); }
+
+    .header-actions { display: flex; gap: 0.6rem; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      font-family: var(--font-body);
+      font-weight: 500; font-size: 0.9rem;
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--rule-strong);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer; text-decoration: none;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .btn:hover, .btn:focus-visible {
+      border-color: var(--text);
+      background: var(--bg-alt);
+    }
+    .btn-primary {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+    .btn-primary:hover, .btn-primary:focus-visible {
+      background: var(--forest);
+      border-color: var(--forest);
+      color: var(--bg);
+    }
+
+    /* ── Main layout ──────────────────────────────────────────────────── */
+    main { padding-bottom: 5rem; }
+
+    .wrap {
+      max-width: var(--measure);
+      margin: 0 auto;
+      padding: 0 clamp(1.25rem, 5vw, 2rem);
+    }
+    .wrap-wide {
+      max-width: var(--measure-wide);
+      margin: 0 auto;
+      padding: 0 clamp(1.25rem, 5vw, 2rem);
+    }
+    .wrap-hero {
+      max-width: var(--measure-hero);
+      margin: 0 auto;
+      padding: 0 clamp(1.25rem, 5vw, 2rem);
+    }
+
+    /* ── Hero ─────────────────────────────────────────────────────────── */
+    .hero {
+      position: relative;
+      padding: clamp(3.5rem, 10vw, 6.5rem) 0 clamp(2.5rem, 7vw, 4.5rem);
+      overflow: hidden;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+      align-items: center;
+    }
+    @media (min-width: 920px) {
+      .hero-grid {
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: 3rem;
+      }
+    }
+
+    .hero .eyebrow {
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--subtle);
+      margin: 0 0 1.5rem;
+    }
+    .hero .eyebrow::before { content: "§ "; color: var(--amber); font-weight: 600; }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-variation-settings: "opsz" 144, "SOFT" 50;
+      font-size: clamp(2.4rem, 5.8vw, 3.8rem);
+      line-height: 1.05;
+      letter-spacing: -0.025em;
+      margin: 0 0 1.5rem;
+      color: var(--text);
+    }
+    .hero h1 .accent-forest { color: var(--forest); font-style: italic; font-weight: 400; }
+    .hero h1 .accent-amber  { color: var(--amber);  font-style: italic; font-weight: 400; }
+    .hero .lede {
+      font-size: 1.12rem;
+      line-height: 1.65;
+      color: var(--muted);
+      max-width: 54ch;
+      margin: 0 0 2rem;
+    }
+    .hero .lede strong { color: var(--text); font-weight: 600; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+
+    /* ── Hero illustration (plug + outlet + cable) ────────────────────── */
+    .hero-art {
+      display: none;
+      position: relative;
+    }
+    @media (min-width: 920px) { .hero-art { display: block; } }
+    .hero-illus {
+      width: 100%;
+      height: auto;
+      max-width: 560px;
+      color: var(--amber);
+      opacity: 0.9;
+      display: block;
+      margin: 0 auto;
+    }
+    .hero-illus .cable {
+      stroke-dasharray: 1800;
+      stroke-dashoffset: 1800;
+      animation: draw-cable 2.6s ease-out 0.3s forwards;
+    }
+    @keyframes draw-cable { to { stroke-dashoffset: 0; } }
+    .hero-illus .plug, .hero-illus .outlet {
+      opacity: 0;
+      animation: fade-in 0.8s ease-out 1.8s forwards;
+    }
+    .hero-illus .outlet { animation-delay: 2.2s; }
+    @keyframes fade-in { to { opacity: 1; } }
+
+    /* ── Sections ────────────────────────────────────────────────────── */
+    section.block {
+      padding: clamp(2.5rem, 6vw, 4rem) 0;
+      position: relative;
+      overflow: hidden;            /* keep the cable SVG from spilling */
+    }
+    section.block + section.block { border-top: 1px solid var(--rule); }
+
+    /* Ensure wrap containers sit above the decorative cable */
+    section.block > .wrap,
+    section.block > .wrap-wide,
+    section.block > .wrap-hero {
+      position: relative;
+      z-index: 1;
+    }
+
+    .kicker {
+      font-family: var(--font-body);
+      font-size: 0.76rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin: 0 0 0.75rem;
+    }
+
+    h2 {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-variation-settings: "opsz" 72;
+      font-size: clamp(1.75rem, 3.5vw, 2.3rem);
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 0 0 1.25rem;
+      color: var(--text);
+    }
+    h3 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.1rem;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      margin: 2rem 0 0.5rem;
+      color: var(--text);
+    }
+
+    p { margin: 0 0 1.1rem; color: var(--text); }
+    p.muted { color: var(--muted); }
+    p.lede { font-size: 1.08rem; color: var(--muted); max-width: 60ch; }
+
+    /* ── Code ─────────────────────────────────────────────────────────── */
+    pre.code {
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      line-height: 1.65;
+      background: var(--bg-code);
+      border: none;
+      border-left: 2px solid var(--amber);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 1.1rem 1.35rem;
+      overflow-x: auto;
+      margin: 1.2rem 0;
+      color: var(--text);
+    }
+    pre.code .k { color: var(--claret); font-weight: 500; }
+    pre.code .s { color: var(--forest); }
+    pre.code .c { color: var(--subtle); font-style: italic; }
+
+    /* ── Cable that guides through the page ──────────────────────────── */
+    .section-cable {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      color: var(--amber);
+      opacity: 0.72;
+    }
+    .section-cable .cable {
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      stroke-dasharray: 500;
+      stroke-dashoffset: 500;
+      transition: stroke-dashoffset 1.6s ease-out;
+    }
+    .section-cable .cable.drawn { stroke-dashoffset: 0; }
+
+    /* On narrow screens the cable metaphor doesn't work well */
+    @media (max-width: 920px) {
+      .section-cable { display: none; }
+    }
+
+    /* ── Pieces section (four pillars) ────────────────────────────────── */
+    .pillars-wrap {
+      position: relative;
+      margin-top: 2rem;
+    }
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 2rem 2.25rem;
+    }
+    .pillar {
+      position: relative;
+      border-top: 1px solid var(--rule);
+      padding-top: 1.1rem;
+    }
+    .pillar .num {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 0.9rem;
+      color: var(--amber);
+      margin-bottom: 0.3rem;
+    }
+    .pillar h4 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin: 0 0 0.5rem;
+      color: var(--text);
+      letter-spacing: -0.005em;
+    }
+    .pillar p {
+      margin: 0;
+      font-size: 0.94rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .wrapper-note {
+      margin-top: 2.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px dashed var(--rule-strong);
+      color: var(--muted);
+      font-size: 0.96rem;
+      max-width: 68ch;
+    }
+    .wrapper-note strong { color: var(--text); }
+
+    /* ── What's new entries ───────────────────────────────────────────── */
+    .new-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+      margin-top: 2rem;
+    }
+    @media (min-width: 820px) {
+      .new-grid { grid-template-columns: 1fr 1fr; gap: 2.5rem 3rem; }
+    }
+    .new-item .label {
+      display: inline-block;
+      font-family: var(--font-body);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin-bottom: 0.5rem;
+    }
+    .new-item .label.forest { color: var(--forest); }
+    .new-item .label.claret { color: var(--claret); }
+    .new-item .label .pin {
+      display: inline-block;
+      margin-left: 0.4rem;
+      padding: 0.05rem 0.4rem;
+      background: var(--amber);
+      color: var(--bg);
+      border-radius: 3px;
+      letter-spacing: 0.08em;
+      font-size: 0.62rem;
+    }
+    .new-item h4 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.2rem;
+      margin: 0 0 0.5rem;
+      color: var(--text);
+    }
+    .new-item p {
+      font-size: 0.96rem;
+      color: var(--muted);
+      margin: 0 0 0.9rem;
+    }
+    .new-item pre.code { margin: 0; font-size: 0.8rem; }
+
+    /* ── Slideshow (deep dive into each piece) ────────────────────────── */
+    .slideshow { position: relative; margin-top: 1.75rem; }
+    .slides { position: relative; min-height: 360px; }
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.4s ease;
+    }
+    .slide.active { position: relative; opacity: 1; visibility: visible; }
+    .slide-num {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 0.95rem;
+      color: var(--amber);
+      display: inline-block;
+      margin-bottom: 0.4rem;
+      letter-spacing: 0.02em;
+    }
+    .slide h3 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(1.5rem, 2.8vw, 1.9rem);
+      margin: 0 0 0.85rem;
+      letter-spacing: -0.015em;
+      line-height: 1.2;
+    }
+    .slide-lede { font-size: 1.08rem; color: var(--muted); max-width: 60ch; margin: 0 0 1rem; }
+    .slide p { color: var(--text); margin: 0 0 1rem; max-width: 66ch; }
+    .slide-list {
+      margin-top: 1.35rem;
+      padding-top: 1.1rem;
+      border-top: 1px solid var(--rule);
+    }
+    .slide-list-label {
+      font-size: 0.74rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin: 0 0 0.6rem;
+    }
+    .slide-list ul { list-style: none; padding: 0; margin: 0; }
+    .slide-list li {
+      color: var(--muted);
+      font-size: 0.96rem;
+      line-height: 1.65;
+      padding: 0.28rem 0 0.28rem 1.4rem;
+      position: relative;
+    }
+    .slide-list li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: var(--amber);
+      font-weight: 500;
+    }
+    .slide-list li strong { color: var(--text); font-weight: 600; }
+
+    .slide-viewport {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .slide-arrow {
+      background: transparent;
+      border: none;
+      padding: 0.6rem 0.25rem;
+      cursor: pointer;
+      color: var(--subtle);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.18s ease, transform 0.18s ease;
+    }
+    .slide-arrow:hover,
+    .slide-arrow:focus-visible { color: var(--amber); outline: none; }
+    .slide-arrow.prev:hover,
+    .slide-arrow.prev:focus-visible { transform: translateX(-2px); }
+    .slide-arrow.next:hover,
+    .slide-arrow.next:focus-visible { transform: translateX(2px); }
+    .slide-arrow svg { display: block; }
+    .slide-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--rule);
+    }
+    .slide-dots {
+      display: flex;
+      gap: 0.7rem;
+      align-items: center;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .slide-dots .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      border: 1px solid var(--rule-strong);
+      background: transparent;
+      padding: 0;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.15s;
+    }
+    .slide-dots .dot:hover,
+    .slide-dots .dot:focus-visible { border-color: var(--amber); outline: none; }
+    .slide-dots .dot.active { background: var(--amber); border-color: var(--amber); }
+    .slide-counter {
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--subtle);
+      letter-spacing: 0.05em;
+      margin: 0.75rem 0 0;
+    }
+
+    /* ── Citation TV ──────────────────────────────────────────────────── */
+    #citation { padding-bottom: clamp(3rem, 8vw, 5rem); }
+
+    .tv-wrap {
+      position: relative;
+      max-width: 640px;
+      margin: 2.25rem auto 0;
+      padding: 56px 0 48px;
+    }
+    .tv-antennas {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 140px;
+      height: 56px;
+      color: var(--amber);
+      opacity: 0.85;
+    }
+    .tv-stand {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 260px;
+      height: 44px;
+      color: var(--amber);
+      opacity: 0.85;
+    }
+    .tv {
+      position: relative;
+      border: 2px solid var(--amber);
+      border-radius: 22px;
+      padding: 0.85rem;
+      background: var(--bg);
+    }
+    .tv::before {
+      content: "";
+      position: absolute;
+      inset: 5px;
+      border-radius: 18px;
+      border: 1px solid var(--rule-strong);
+      pointer-events: none;
+    }
+    .tv-dial {
+      position: absolute;
+      right: -18px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 46px;
+      border: 2px solid var(--amber);
+      border-left: none;
+      border-radius: 0 8px 8px 0;
+      background: var(--bg);
+    }
+    .tv-dial::before,
+    .tv-dial::after {
+      content: "";
+      position: absolute;
+      left: 2px;
+      right: 4px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--amber);
+      opacity: 0.7;
+    }
+    .tv-dial::before { top: 8px; }
+    .tv-dial::after  { bottom: 8px; }
+    .tv-screen {
+      background: var(--bg-screen);
+      border-radius: 14px;
+      padding: 1.1rem 1.35rem 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .tv-screen::before,
+    .tv-screen::after {
+      content: "";
+      position: absolute;
+      left: 0; right: 0;
+      height: 1px;
+      pointer-events: none;
+    }
+    .tv-screen::before { top: 0; background: rgba(255,255,255,0.55); }
+    .tv-screen::after  { bottom: 0; background: rgba(0,0,0,0.06); }
+    .tv-screen pre.code {
+      margin: 0;
+      background: transparent;
+      border-left: none;
+      border-radius: 0;
+      padding: 0;
+      font-size: 0.8rem;
+    }
+    .tv-label {
+      margin-top: 0.9rem;
+      padding-top: 0.55rem;
+      border-top: 1px dashed rgba(0,0,0,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--subtle);
+    }
+    .tv-label .on-air { color: var(--claret); font-weight: 600; }
+    .tv-label .on-air::before {
+      content: "● ";
+      color: var(--claret);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────────── */
+    footer.site {
+      border-top: 1px solid var(--rule);
+      padding: 2.5rem clamp(1.25rem, 5vw, 2rem);
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-family: var(--font-body);
+    }
+    footer.site p { margin: 0; }
+    footer.site .dot { color: var(--rule-strong); margin: 0 0.6rem; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      * { transition: none !important; }
+      .hero-illus .cable,
+      .hero-illus .plug,
+      .hero-illus .outlet,
+      .section-cable .cable {
+        animation: none !important;
+        stroke-dashoffset: 0 !important;
+        opacity: 1 !important;
+      }
+      .tv-label .on-air::before { animation: none; }
+      .slide { transition: none; }
+    }
+  </style>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": ["SoftwareSourceCode", "SoftwareApplication"],
+        "@id": "https://niklasbubeck.github.io/MedLat/#software",
+        "name": "MedLat",
+        "alternateName": ["medlat", "Med Lat", "Medical Latent"],
+        "headline": "MedLat — PyTorch Library for Generative Imaging",
+        "description": "PyTorch library for generative imaging built from four plug-and-play pieces — autoencoder, generator, alignment module, denoising scheduler. Supports 2D computer vision and 3D volumetric medical imaging through the same API.",
+        "abstract": "Plug-and-play PyTorch library for generative imaging pipelines over 2D and 3D data.",
+        "license": "https://opensource.org/licenses/MIT",
+        "codeRepository": "https://github.com/niklasbubeck/MedLat",
+        "url": "https://niklasbubeck.github.io/MedLat/",
+        "downloadUrl": "https://github.com/niklasbubeck/MedLat",
+        "installUrl": "https://github.com/niklasbubeck/MedLat#installation",
+        "softwareVersion": "0.1.4",
+        "version": "0.1.4",
+        "datePublished": "2025-01-01",
+        "dateModified": "2026-04-23",
+        "programmingLanguage": ["Python"],
+        "runtimePlatform": ["PyTorch"],
+        "operatingSystem": "Linux, macOS, Windows",
+        "applicationCategory": ["DeveloperApplication", "ScientificApplication"],
+        "applicationSubCategory": "Machine Learning Library",
+        "keywords": "PyTorch, generative imaging, autoencoder, VAE, AutoencoderKL, VQ-VAE, VQ-GAN, diffusion, Diffusion Transformer, DiT, MDT, U-ViT, UNet, LDM, ADM, DDPM, DDIM, Gaussian Diffusion, flow matching, FlowMatching, self-flow, SelfFlow, MaskGIT, MaskBit, MAGE, Muse, MAR, RAR, Fractal, VAR, Taming Transformers, LFQ, BSQ, FSQ, QINCo, RQ-VAE, SimVQ, SoftVQ, HCVQ, TiTok, MAETok, VMAE, DeTok, ViTA, DCAE, MedVAE, VA-VAE, alignment, DINOv2, MAE, BiomedCLIP, medical imaging, radiology, pathology, latent diffusion, 2D, 3D, denoising scheduler",
+        "featureList": [
+          "Diffusion generators: DiT (Diffusion Transformer), MDT (Masked Diffusion Transformer), U-ViT, UNet (ADM / LDM)",
+          "Masked generators: MaskGIT, MaskBit (LFQBert), MAGE, Muse",
+          "Continuous-autoregressive generators: MAR, RAR, FractalGen",
+          "Discrete-autoregressive / causal generators: Taming GPT, VAR",
+          "Continuous autoencoders: AutoencoderKL (VAE / KL-VAE), VA-VAE, MedVAE, DCAE, MAISI, SoftVQ, WQ-VAE",
+          "Discrete / VQ tokenizers: VQ-VAE, VQ-GAN, LFQ (Lookup-Free Quantization), BSQ (Binary Spherical Quantization), FSQ (Finite Scalar Quantization), QINCo, RQ-VAE, SimVQ, HCVQ, MSRQ, MaskGIT-VQ",
+          "Token-sequence tokenizers: TiTok, MAETok, VMAE, DeTok, ViTA (ReconMAE), SoftVQ tokens",
+          "Denoising schedulers: GaussianDiffusion (DDPM / DDIM with dimension-aware Esser shift), FlowMatching, Self-Flow (DualTimestepScheduler)",
+          "Alignment teachers: DINOv2-L, MAE-L, BiomedCLIP",
+          "GenWrapper — validated glue layer pairing first stage and generator",
+          "Works for both 2D imagery (dims=2) and 3D medical volumes (dims=3)"
+        ],
+        "inLanguage": "en",
+        "author":     { "@id": "https://github.com/niklasbubeck#person" },
+        "creator":    { "@id": "https://github.com/niklasbubeck#person" },
+        "maintainer": { "@id": "https://github.com/niklasbubeck#person" },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock"
+        },
+        "isAccessibleForFree": true,
+        "sameAs": [
+          "https://github.com/niklasbubeck/MedLat"
+        ]
+      },
+      {
+        "@type": "Person",
+        "@id": "https://github.com/niklasbubeck#person",
+        "name": "Niklas Bubeck",
+        "url": "https://github.com/niklasbubeck",
+        "sameAs": ["https://github.com/niklasbubeck"],
+        "jobTitle": "Researcher",
+        "knowsAbout": ["PyTorch", "generative modeling", "medical imaging", "computer vision", "latent diffusion", "autoencoder", "diffusion model", "Diffusion Transformer (DiT)", "Masked Diffusion Transformer (MDT)", "U-ViT", "UNet", "LDM", "ADM", "MaskGIT", "MAR", "RAR", "FractalGen", "Muse", "MAGE", "MaskBit", "VAR", "Taming Transformers", "AutoencoderKL", "VQ-VAE", "VQ-GAN", "LFQ", "BSQ", "FSQ", "QINCo", "RQ-VAE", "SimVQ", "SoftVQ", "TiTok", "MAETok", "VMAE", "DCAE", "MedVAE", "VA-VAE", "Gaussian Diffusion", "DDPM", "DDIM", "Flow Matching", "Rectified Flow", "Self-Flow", "DINOv2", "MAE", "BiomedCLIP"]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://niklasbubeck.github.io/MedLat/#website",
+        "name": "MedLat",
+        "alternateName": "medlat",
+        "url": "https://niklasbubeck.github.io/MedLat/",
+        "description": "Official documentation site for MedLat — PyTorch library for generative imaging.",
+        "inLanguage": "en",
+        "publisher": { "@id": "https://github.com/niklasbubeck#person" },
+        "about":     { "@id": "https://niklasbubeck.github.io/MedLat/#software" }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://niklasbubeck.github.io/MedLat/#webpage",
+        "url": "https://niklasbubeck.github.io/MedLat/",
+        "name": "MedLat — PyTorch Library for Generative Imaging",
+        "isPartOf": { "@id": "https://niklasbubeck.github.io/MedLat/#website" },
+        "about":    { "@id": "https://niklasbubeck.github.io/MedLat/#software" },
+        "primaryImageOfPage": {
+          "@type": "ImageObject",
+          "url": "https://niklasbubeck.github.io/MedLat/assets/og-cover.svg",
+          "width": 1200,
+          "height": 630,
+          "caption": "MedLat — four plug-and-play pieces for generative imaging"
+        },
+        "breadcrumb": { "@id": "https://niklasbubeck.github.io/MedLat/#breadcrumbs" },
+        "datePublished": "2025-01-01",
+        "dateModified": "2026-04-23",
+        "inLanguage": "en",
+        "author": { "@id": "https://github.com/niklasbubeck#person" }
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "https://niklasbubeck.github.io/MedLat/#breadcrumbs",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "MedLat",
+            "item": "https://niklasbubeck.github.io/MedLat/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "API Documentation",
+            "item": "https://niklasbubeck.github.io/MedLat/api/"
+          }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://niklasbubeck.github.io/MedLat/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is MedLat?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "MedLat is a PyTorch library for generative imaging, built from four plug-and-play pieces: an autoencoder (continuous or discrete tokenizer), a generator (diffusion, masked, or autoregressive), an optional alignment module, and a denoising scheduler. It works for both 2D images and 3D medical volumes through the same API."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can MedLat handle 3D medical volumes?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Every piece supports dims=2 and dims=3, and img_size and patch_size accept either an integer (square or cubic) or a per-axis tuple. No code changes are required to switch between 2D and 3D."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I install MedLat?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Clone the repository from GitHub and run pip install -e . from the repo root. Core dependencies include PyTorch, NumPy, Einops, timm, OmegaConf, and MONAI."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which generators does MedLat support?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Non-autoregressive diffusion (transformer and UNet backbones), continuous autoregressive with a diffusion loss (masked and recurrent variants), and discrete autoregressive including masked, causal, and BERT-style denoisers on token grids."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What is latent alignment?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Latent alignment reshapes the autoencoder's latent space to match the semantic geometry of a frozen vision-foundation teacher — DINOv2, MAE, or BiomedCLIP. This gives latent codes a semantic coordinate system, which measurably speeds up downstream generator convergence."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which denoising schedulers are included?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Three paradigms through a single factory: Gaussian diffusion with optional dimension-aware timestep shift for 3D volumes, flow matching with configurable paths and prediction targets, and self-flow masking-driven token denoising."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is MedLat open source?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. MedLat is released under the MIT License and is freely available on GitHub at github.com/niklasbubeck/MedLat. Contributions and issue reports are welcome through the project repository."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does MedLat work on standard 2D natural images?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. The library supports 2D computer vision use cases equally — the same API handles both 2D images and 3D medical volumes. Use dims=2 for 2D images."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which model architectures are included in MedLat?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "MedLat ships a broad catalog of published architectures behind a single registry. Diffusion generators: DiT (Diffusion Transformer), MDT (Masked Diffusion Transformer), U-ViT, UNet / ADM, LDM. Masked generators: MaskGIT, MAGE, MaskBit (LFQBert), Muse. Continuous-autoregressive: MAR, RAR, FractalGen. Causal / discrete-autoregressive: Taming GPT, VAR. Continuous autoencoders: AutoencoderKL (VAE / KL-VAE), VA-VAE, MedVAE, DCAE, MAISI, SoftVQ, WQ-VAE. Discrete and VQ tokenizers: VQ-VAE, VQ-GAN, LFQ (Lookup-Free Quantization), BSQ (Binary Spherical Quantization), FSQ (Finite Scalar Quantization), QINCo, RQ-VAE, SimVQ, HCVQ, MSRQ. Token-sequence models: TiTok, MAETok, VMAE, DeTok, ViTA (ReconMAE). Denoising schedulers: GaussianDiffusion (DDPM / DDIM with Esser dimension-aware shift), FlowMatching, Self-Flow. Alignment teachers: DINOv2, MAE, BiomedCLIP."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does MedLat include a Diffusion Transformer (DiT) implementation?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. DiT (Diffusion Transformer) is registered under dit.* in sizes s / b / l / xl with patch sizes 1, 2, 4, 8. Sibling diffusion-transformer variants MDT (Masked Diffusion Transformer), U-ViT and self_flow.* are also included. They pair with any continuous autoencoder (AutoencoderKL, VA-VAE, MedVAE, DCAE) via GenWrapper."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site" role="banner">
+    <a class="brand" href="./" aria-current="page" aria-label="MedLat home">
+      <span class="brand-med">Med</span><span class="brand-lad">Lat</span>
+    </a>
+    <nav class="site-nav" aria-label="Page sections">
+      <a href="#pieces">Pieces</a>
+      <a href="#install">Install</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#whats-new">What's new</a>
+      <a href="#deep-dive">Deep dive</a>
+    </nav>
+    <div class="header-actions">
+      <a class="btn" href="./api/">Docs</a>
+      <a class="btn btn-primary" href="https://github.com/niklasbubeck/MedLat">GitHub</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ── HERO ──────────────────────────────────────────────────────────── -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap-hero hero-grid">
+        <div class="hero-text">
+          <p class="eyebrow">v0.1.4 &nbsp;·&nbsp; Plug and play</p>
+          <h1 id="hero-title">
+            One registry.<br>
+            Four <span class="accent-forest">pieces</span>.<br>
+            <span class="accent-amber">Plug and play</span>.
+          </h1>
+          <p class="lede">
+            <strong>MedLat</strong> (<code>medlat</code>) is a PyTorch library organised
+            around four plug-and-play pieces — an <strong>autoencoder</strong>, a
+            <strong>generator</strong>, an optional <strong>alignment module</strong>,
+            and a <strong>denoising scheduler</strong>. Pick one of each, snap them
+            together, and train. Works for <strong>2D images</strong> and
+            <strong>3D medical volumes</strong> with no code changes.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="https://github.com/niklasbubeck/MedLat">Grab the repo</a>
+            <a class="btn" href="./api/">Documentation</a>
+            <a class="btn" href="#quickstart">Quick start</a>
+          </div>
+        </div>
+
+        <div class="hero-art" aria-hidden="true">
+          <svg class="hero-illus" viewBox="0 0 600 440" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+
+              <!-- Cable exits the plug, loops under, and trails off the
+                   bottom-right — where the section cables pick it up. -->
+              <path class="cable"
+                    d="M 132 220
+                       C 72 236, 38 296, 52 360
+                       C 68 418, 170 452, 300 447
+                       C 420 442, 500 438, 555 438"/>
+
+              <g class="plug">
+                <rect x="132" y="170" width="158" height="100" rx="16"/>
+                <line x1="160" y1="220" x2="262" y2="220"
+                      stroke-dasharray="3 4" opacity="0.5"/>
+                <rect x="290" y="198" width="68" height="7" rx="2"/>
+                <rect x="290" y="235" width="68" height="7" rx="2"/>
+              </g>
+
+              <g class="outlet">
+                <rect x="420" y="135" width="150" height="170" rx="10"/>
+                <circle cx="540" cy="158" r="3.5"/>
+                <circle cx="540" cy="282" r="3.5"/>
+                <rect x="422" y="197" width="26" height="9" rx="2"/>
+                <rect x="422" y="234" width="26" height="9" rx="2"/>
+                <circle cx="495" cy="272" r="8"/>
+              </g>
+
+              <g class="outlet" stroke="currentColor" stroke-width="1.4" opacity="0.55">
+                <circle cx="376" cy="201.5" r="1.2"/>
+                <circle cx="392" cy="201.5" r="1.2"/>
+                <circle cx="408" cy="201.5" r="1.2"/>
+                <circle cx="376" cy="238.5" r="1.2"/>
+                <circle cx="392" cy="238.5" r="1.2"/>
+                <circle cx="408" cy="238.5" r="1.2"/>
+              </g>
+
+            </g>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── FOUR PIECES ──────────────────────────────────────────────────── -->
+    <section class="block" id="pieces" aria-labelledby="h-pieces">
+      <!-- The cable enters top-right (continuing the hero cable),
+           curls inward once as it passes the four pieces, and exits
+           bottom-right to descend into the next section. -->
+      <svg class="section-cable" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="cable"
+              d="M 93 0
+                 C 88 14, 96 24, 90 34
+                 C 83 43, 78 48, 82 56
+                 C 86 63, 97 68, 90 78
+                 C 84 88, 97 94, 92 100"/>
+      </svg>
+
+      <div class="wrap-wide">
+        <p class="kicker">Architecture</p>
+        <h2 id="h-pieces">Four pieces. Any combination.</h2>
+        <p class="lede">
+          Every MedLat pipeline is assembled from the same four plug-and-play pieces.
+          Swap any one of them without touching the others.
+        </p>
+
+        <div class="pillars-wrap">
+          <div class="pillars">
+            <div class="pillar">
+              <div class="num">i.</div>
+              <h4>Autoencoder / Tokenizer</h4>
+              <p>Pixels in, latents out. Continuous KL autoencoders or discrete quantizers, 2D or 3D, any compression ratio.</p>
+            </div>
+            <div class="pillar">
+              <div class="num">ii.</div>
+              <h4>Generator</h4>
+              <p>Learns the distribution in latent space. Non-autoregressive diffusion, masked, or autoregressive — whichever suits the tokenizer.</p>
+            </div>
+            <div class="pillar">
+              <div class="num">iii.</div>
+              <h4>Alignment Module</h4>
+              <p>Optional. Reshapes the latent geometry around a frozen vision-foundation teacher so nearby codes are semantically nearby.</p>
+            </div>
+            <div class="pillar">
+              <div class="num">iv.</div>
+              <h4>Denoising Scheduler</h4>
+              <p>Drives the generator during training and sampling. Gaussian diffusion, flow matching, or self-flow — one unified factory.</p>
+            </div>
+          </div>
+        </div>
+
+        <p class="wrapper-note">
+          <strong>GenWrapper</strong> is the outlet the four pieces snap into — it
+          detects their types, wires the right encode / decode path, and validates
+          the combination at construction so mismatches surface immediately.
+        </p>
+      </div>
+    </section>
+
+    <!-- ── INSTALL ───────────────────────────────────────────────────────── -->
+    <section class="block" id="install" aria-labelledby="h-install">
+      <svg class="section-cable" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="cable"
+              d="M 92 0
+                 C 96 22, 82 40, 88 58
+                 C 94 72, 82 86, 92 100"/>
+      </svg>
+
+      <div class="wrap">
+        <p class="kicker">Setup</p>
+        <h2 id="h-install">Installation.</h2>
+        <p class="muted">
+          Core dependencies: PyTorch, NumPy, Einops, timm, OmegaConf, MONAI. Optional
+          quantizer paths pull in extras lazily when needed.
+        </p>
+<pre class="code" tabindex="0"><span class="c"># Editable install from repo root</span>
+pip install -e .
+
+<span class="c"># With dev extras (pytest, ruff, mypy, pre-commit)</span>
+pip install -e <span class="s">".[dev]"</span></pre>
+      </div>
+    </section>
+
+    <!-- ── QUICKSTART ────────────────────────────────────────────────────── -->
+    <section class="block" id="quickstart" aria-labelledby="h-quick">
+      <svg class="section-cable" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="cable"
+              d="M 92 0
+                 C 86 8, 95 18, 90 28
+                 C 82 40, 96 52, 88 64
+                 C 80 76, 96 84, 92 100"/>
+      </svg>
+
+      <div class="wrap-wide">
+        <p class="kicker">First five minutes</p>
+        <h2 id="h-quick">Quick start.</h2>
+        <p class="lede">
+          Discover a piece, build a tokenizer, snap a generator onto it, and let
+          the registry fill in the mechanical kwargs.
+        </p>
+<pre class="code" tabindex="0"><span class="k">from</span> medlat <span class="k">import</span> (
+    get_model, available_models, get_model_signature,
+    suggest_generator_params, clone_with,
+    GenWrapper, create_scheduler, available_schedulers,
+)
+
+<span class="c"># ── Discover ─────────────────────────────────────────────────────────</span>
+available_models(<span class="s">"discrete."</span>)          <span class="c"># filter by prefix</span>
+get_model_signature(<span class="s">"dit.xl_2"</span>)         <span class="c"># see required kwargs</span>
+
+<span class="c"># ── Autoencoder + generator — params inferred automatically ────────</span>
+tok = get_model(<span class="s">"continuous.aekl.f8_d16"</span>, img_size=<span class="s">224</span>)
+gen = get_model(<span class="s">"dit.xl_2"</span>, img_size=<span class="s">224</span>, num_classes=<span class="s">10</span>,
+                **suggest_generator_params(tok))  <span class="c"># → vae_stride=8, in_channels=16</span>
+wrapper = GenWrapper(gen, tok)
+<span class="k">print</span>(wrapper)                            <span class="c"># routing · models · scale_factor</span>
+
+<span class="c"># ── Tweak without rebuilding a config ───────────────────────────────</span>
+tok_hires = clone_with(tok, img_size=<span class="s">512</span>)   <span class="c"># fresh instance, swap fields</span>
+
+<span class="c"># ── Denoising scheduler — discover, inspect, create ────────────────</span>
+available_schedulers()                        <span class="c"># ('diffusion', 'flow', 'self_flow')</span>
+sched = create_scheduler(<span class="s">"flow"</span>, path_type=<span class="s">"Linear"</span>, prediction=<span class="s">"velocity"</span>)
+
+<span class="c"># ── 3D volumes — same API ───────────────────────────────────────────</span>
+get_model(<span class="s">"continuous.aekl.f8_d16"</span>, img_size=(<span class="s">64,128,128</span>), dims=<span class="s">3</span>)</pre>
+      </div>
+    </section>
+
+    <!-- ── WHAT'S NEW ────────────────────────────────────────────────────── -->
+    <section class="block" id="whats-new" aria-labelledby="h-new">
+      <svg class="section-cable" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="cable"
+              d="M 92 0
+                 C 98 18, 80 34, 88 50
+                 C 95 64, 82 80, 92 100"/>
+      </svg>
+
+      <div class="wrap-wide">
+        <p class="kicker">Release notes</p>
+        <h2 id="h-new">What's new in v0.1.4.</h2>
+        <p class="lede">
+          Four quiet improvements that together remove most of the friction in
+          wiring the pieces together.
+        </p>
+
+        <div class="new-grid">
+
+          <div class="new-item">
+            <span class="label forest">Inference</span>
+            <h4>Stop guessing kwargs.</h4>
+            <p>
+              <code>suggest_generator_params(tokenizer)</code> returns the exact
+              kwargs the paired generator needs — <code>in_channels</code>,
+              <code>vae_stride</code>, <code>codebook_size</code> — derived directly
+              from the autoencoder.
+            </p>
+<pre class="code" tabindex="0">gen = get_model(<span class="s">"&lt;generator-id&gt;"</span>, img_size=<span class="s">256</span>,
+                num_classes=<span class="s">1000</span>,
+                **suggest_generator_params(tok))</pre>
+          </div>
+
+          <div class="new-item">
+            <span class="label">Iteration<span class="pin">new</span></span>
+            <h4>Clone &amp; tweak.</h4>
+            <p>
+              Every piece built via <code>get_model()</code> now carries its config.
+              <code>clone_with(model, **overrides)</code> rebuilds a fresh instance
+              with fields swapped — no config dict to reassemble.
+            </p>
+<pre class="code" tabindex="0">tok       = get_model(<span class="s">"&lt;autoencoder-id&gt;"</span>,
+                      img_size=<span class="s">256</span>)
+tok_wide  = clone_with(tok, z_channels=<span class="s">16</span>)
+tok_hires = clone_with(tok_wide, img_size=<span class="s">512</span>)
+tok.config   <span class="c"># {'img_size': 256}</span></pre>
+          </div>
+
+          <div class="new-item">
+            <span class="label claret">Safety</span>
+            <h4>Actionable errors.</h4>
+            <p>
+              <code>GenWrapper</code> validates the pair at construction time and
+              tells you exactly how to fix a mismatch — no silent crashes half-way
+              through a training loop.
+            </p>
+<pre class="code" tabindex="0"><span class="c"># ValueError: Channel mismatch:</span>
+<span class="c">#   generator.in_channels=4 but autoencoder.embed_dim=16.</span>
+<span class="c">#   → Rebuild with in_channels=16, or pass</span>
+<span class="c">#     **suggest_generator_params(tokenizer)</span></pre>
+          </div>
+
+          <div class="new-item">
+            <span class="label">Scheduling<span class="pin">new</span></span>
+            <h4>Unified scheduler registry.</h4>
+            <p>
+              One <code>medlat.scheduling</code> package replaces the old
+              <code>diffusion</code> and <code>transport</code> modules. Discover,
+              inspect, and build denoising schedulers the same way you build the
+              other three pieces.
+            </p>
+<pre class="code" tabindex="0">available_schedulers()
+<span class="c"># → ('diffusion', 'flow', 'self_flow')</span>
+sched = create_scheduler(<span class="s">"self_flow"</span>,
+           masking_strategy=<span class="s">"complexity"</span>)</pre>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ── DEEP DIVE SLIDESHOW ───────────────────────────────────────────── -->
+    <section class="block" id="deep-dive" aria-labelledby="h-deep">
+      <svg class="section-cable" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="cable"
+              d="M 92 0
+                 C 84 22, 98 44, 88 66
+                 C 80 82, 96 92, 92 100"/>
+      </svg>
+
+      <div class="wrap">
+        <p class="kicker">Inside each piece</p>
+        <h2 id="h-deep">Deep dive.</h2>
+        <p class="lede">
+          A closer look at what each of the four pieces offers. Step through with
+          the arrows, dots, or the left / right keys.
+        </p>
+
+        <div class="slideshow" role="region" aria-roledescription="carousel" aria-label="Building blocks" tabindex="0">
+          <div class="slide-viewport">
+            <button class="slide-arrow prev" type="button" aria-label="Previous piece">
+              <svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 7 11 16 20 25"/>
+              </svg>
+            </button>
+          <div class="slides">
+
+            <article class="slide active" role="tabpanel" aria-labelledby="sl-1-title">
+              <span class="slide-num">i.</span>
+              <h3 id="sl-1-title">Autoencoder / Tokenizer</h3>
+              <p class="slide-lede">
+                Pixels in, latents out. The first stage compresses images or 3D
+                volumes into a representation the generator can work with.
+              </p>
+              <p>
+                Two families live here. <strong>Continuous</strong> autoencoders keep
+                the latent space smooth and differentiable — ideal pairing for
+                diffusion generators. <strong>Discrete</strong> tokenizers quantise
+                into a finite vocabulary — ideal for sequence-model generators.
+              </p>
+              <div class="slide-list">
+                <p class="slide-list-label">What's available</p>
+                <ul>
+                  <li><strong>Continuous</strong> KL autoencoders across a range of compression ratios and latent widths.</li>
+                  <li><strong>Discrete</strong> quantization schemes: vector, lookup-free, binary-spherical, finite-scalar, residual, and hybrid variants.</li>
+                  <li><strong>One-dimensional token sequences</strong> for sequence-model generation.</li>
+                  <li>Every option supports 2D imagery and 3D volumetric data through the same API.</li>
+                </ul>
+              </div>
+            </article>
+
+            <article class="slide" role="tabpanel" aria-labelledby="sl-2-title">
+              <span class="slide-num">ii.</span>
+              <h3 id="sl-2-title">Generator</h3>
+              <p class="slide-lede">
+                Learns the distribution of latents. Sampling a new image begins here.
+              </p>
+              <p>
+                Pick the family that matches the tokenizer.
+                <strong>Diffusion</strong> and <strong>masked</strong> generators
+                denoise or fill in parallel steps;
+                <strong>autoregressive</strong> generators predict one latent at a
+                time. Conditional and unconditional training are first-class.
+              </p>
+              <div class="slide-list">
+                <p class="slide-list-label">What's available</p>
+                <ul>
+                  <li><strong>Non-autoregressive diffusion</strong> — transformer and UNet backbones, with or without masked branches.</li>
+                  <li><strong>Continuous autoregressive</strong> — masked and recurrent variants, trained with a diffusion loss on continuous latents.</li>
+                  <li><strong>Discrete autoregressive</strong> — masked, causal, and BERT-style denoisers on token grids.</li>
+                </ul>
+              </div>
+            </article>
+
+            <article class="slide" role="tabpanel" aria-labelledby="sl-3-title">
+              <span class="slide-num">iii.</span>
+              <h3 id="sl-3-title">Alignment Module</h3>
+              <p class="slide-lede">
+                Optional. Reshapes the latent geometry around a frozen
+                vision-foundation teacher.
+              </p>
+              <p>
+                A reconstruction-only latent space is compact but geometrically
+                opaque — nearby codes carry no semantic guarantee. Alignment adds a
+                projection head and a <strong>Vision-Foundation loss</strong> that
+                pulls the autoencoder toward the teacher's semantic structure. The
+                teacher is frozen; only the projection head trains.
+              </p>
+              <div class="slide-list">
+                <p class="slide-list-label">Teachers available</p>
+                <ul>
+                  <li><strong>DINOv2-L</strong> — natural imagery, general vision.</li>
+                  <li><strong>MAE-L</strong> — self-supervised vision.</li>
+                  <li><strong>BiomedCLIP</strong> — medical imaging, recommended for radiology and pathology.</li>
+                </ul>
+              </div>
+            </article>
+
+            <article class="slide" role="tabpanel" aria-labelledby="sl-4-title">
+              <span class="slide-num">iv.</span>
+              <h3 id="sl-4-title">Denoising Scheduler</h3>
+              <p class="slide-lede">
+                Drives the generator during training and sampling.
+              </p>
+              <p>
+                A unified factory exposes three paradigms side by side — discover
+                and build them the same way you build the other three pieces:
+                <code>available_schedulers()</code>, <code>scheduler_info(name)</code>,
+                <code>create_scheduler(name, **kwargs)</code>.
+              </p>
+              <div class="slide-list">
+                <p class="slide-list-label">Paradigms available</p>
+                <ul>
+                  <li><strong>Gaussian diffusion</strong> — DDPM-style, with optional dimension-aware timestep shift for 3D volumes.</li>
+                  <li><strong>Flow matching</strong> — configurable paths and prediction targets.</li>
+                  <li><strong>Self-flow</strong> — masking-driven token denoising.</li>
+                </ul>
+              </div>
+            </article>
+
+          </div>
+            <button class="slide-arrow next" type="button" aria-label="Next piece">
+              <svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="12 7 21 16 12 25"/>
+              </svg>
+            </button>
+          </div>
+
+          <nav class="slide-controls" aria-label="Slideshow navigation">
+            <ol class="slide-dots">
+              <li><button class="dot active" type="button" data-idx="0" aria-label="Autoencoder / Tokenizer"></button></li>
+              <li><button class="dot" type="button" data-idx="1" aria-label="Generator"></button></li>
+              <li><button class="dot" type="button" data-idx="2" aria-label="Alignment Module"></button></li>
+              <li><button class="dot" type="button" data-idx="3" aria-label="Denoising Scheduler"></button></li>
+            </ol>
+          </nav>
+          <p class="slide-counter" aria-live="polite"><span class="cur">1</span> / 4</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CITATION (cable plugs into a TV) ──────────────────────────────── -->
+    <section class="block" id="citation" aria-labelledby="h-cite">
+      <!-- The cable drops from the top-right, swings inward, and plugs
+           into the right side of the TV. -->
+      <svg class="section-cable" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="cable"
+              d="M 92 0
+                 C 96 10, 88 18, 82 26
+                 C 76 34, 82 42, 78 50
+                 C 75 58, 72 60, 72 62"/>
+      </svg>
+
+      <div class="wrap">
+        <p class="kicker">Cite</p>
+        <h2 id="h-cite">Citation.</h2>
+        <p class="muted" style="max-width:58ch">
+          The cable's final stop. If you use MedLat in a paper, project, or thesis,
+          please cite it.
+        </p>
+
+        <div class="tv-wrap">
+          <!-- Antennas -->
+          <svg class="tv-antennas" viewBox="0 0 140 56" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="70" y1="54" x2="32" y2="7"/>
+              <line x1="70" y1="54" x2="108" y2="7"/>
+              <circle cx="32" cy="7"  r="3" fill="currentColor"/>
+              <circle cx="108" cy="7" r="3" fill="currentColor"/>
+              <circle cx="70" cy="54" r="3.5" fill="currentColor"/>
+            </g>
+          </svg>
+
+          <div class="tv">
+            <span class="tv-dial" aria-hidden="true"></span>
+            <div class="tv-screen">
+<pre class="code" tabindex="0"><span class="k">@software</span>{bubeck_medlat_2025,
+  author  = {Bubeck, Niklas},
+  title   = {{MedLat}: A {PyTorch} Library for Generative Imaging},
+  url     = {https://github.com/niklasbubeck/MedLat},
+  version = {0.1.4},
+  year    = {2025},
+}</pre>
+              <div class="tv-label">
+                <span>Ch. 04 &nbsp;·&nbsp; Med·Lat</span>
+                <span class="on-air">on air</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stand -->
+          <svg class="tv-stand" viewBox="0 0 260 44" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M 45 6 L 130 36 L 215 6"/>
+              <line x1="55" y1="38" x2="205" y2="38"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site" role="contentinfo">
+    <p>
+      <strong>MedLat</strong>
+      <span class="dot">·</span> MIT License
+      <span class="dot">·</span> <a href="https://github.com/niklasbubeck/MedLat">GitHub</a>
+      <span class="dot">·</span> <a href="./api/">Documentation</a>
+      <span class="dot">·</span> <a href="./llms.txt">llms.txt</a>
+    </p>
+  </footer>
+
+  <script>
+    (function () {
+      const show = document.querySelector('.slideshow');
+      if (!show) return;
+      const slides  = show.querySelectorAll('.slide');
+      const dots    = show.querySelectorAll('.slide-dots .dot');
+      const prev    = show.querySelector('.slide-arrow.prev');
+      const next    = show.querySelector('.slide-arrow.next');
+      const counter = show.querySelector('.slide-counter .cur');
+      let cur = 0;
+
+      function go(i) {
+        cur = (i + slides.length) % slides.length;
+        slides.forEach((s, k) => s.classList.toggle('active', k === cur));
+        dots.forEach((d, k) => {
+          d.classList.toggle('active', k === cur);
+          if (k === cur) d.setAttribute('aria-current', 'true');
+          else d.removeAttribute('aria-current');
+        });
+        if (counter) counter.textContent = String(cur + 1);
+      }
+
+      prev.addEventListener('click', () => go(cur - 1));
+      next.addEventListener('click', () => go(cur + 1));
+      dots.forEach((d, i) => d.addEventListener('click', () => go(i)));
+
+      show.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); go(cur - 1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); go(cur + 1); }
+      });
+    })();
+
+    // Progressive cable reveal: each section's cable draws in when it
+    // scrolls into view. Respects prefers-reduced-motion.
+    (function () {
+      const cables = document.querySelectorAll('.section-cable .cable');
+      if (!cables.length) return;
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduced || !('IntersectionObserver' in window)) {
+        cables.forEach(c => c.classList.add('drawn'));
+        return;
+      }
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            e.target.classList.add('drawn');
+            obs.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.18, rootMargin: '0px 0px -10% 0px' });
+      cables.forEach(c => obs.observe(c));
+    })();
+  </script>
+</body>
+</html>

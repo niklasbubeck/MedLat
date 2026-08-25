@@ -1,0 +1,65 @@
+# MedLat — PyTorch Library for Generative Imaging
+# https://niklasbubeck.github.io/MedLat/
+#
+# We welcome all well-behaved crawlers (search engines, academic agents,
+# and LLM training/retrieval bots that respect robots.txt).
+
+User-agent: *
+Allow: /
+Crawl-delay: 0
+
+# Explicit allowlist for major search engines — no restrictions.
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+# AI / agent crawlers that may use the site for retrieval or training.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+# Sitemaps
+Sitemap: https://niklasbubeck.github.io/MedLat/sitemap.xml
+
+# Host
+Host: https://niklasbubeck.github.io/MedLat/

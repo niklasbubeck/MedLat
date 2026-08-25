@@ -1,0 +1,16 @@
+/* MedLat custom styles */
+
+/* Slightly wider content area */
+.content-icon-container { gap: 0.5rem; }
+
+/* Monospace in autodoc signatures */
+.sig-name { font-weight: 600; }
+
+/* Highlight <required> sentinels */
+em.sig-param > span {
+    color: var(--color-brand-primary);
+}
+
+/* Nicer note/warning admonitions */
+.admonition.note > .admonition-title { background-color: #e8f4fd; }
+.admonition.warning > .admonition-title { background-color: #fff3cd; }

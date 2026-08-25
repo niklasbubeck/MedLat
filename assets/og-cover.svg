@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0612"/>
+      <stop offset="45%" style="stop-color:#1a0f2e"/>
+      <stop offset="100%" style="stop-color:#12082a"/>
+    </linearGradient>
+    <linearGradient id="medg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3ee6d6"/>
+      <stop offset="100%" style="stop-color:#5b8cff"/>
+    </linearGradient>
+    <linearGradient id="ladg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff5e9a"/>
+      <stop offset="100%" style="stop-color:#ffb84d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="1050" cy="80" r="220" fill="#ff5e9a" opacity="0.07"/>
+  <circle cx="100" cy="520" r="180" fill="#3ee6d6" opacity="0.08"/>
+  <text x="72" y="260" fill="url(#medg)" font-family="system-ui,sans-serif" font-size="108" font-weight="800" letter-spacing="-0.04em">Med</text>
+  <text x="72" y="380" fill="url(#ladg)" font-family="system-ui,sans-serif" font-size="108" font-weight="800" letter-spacing="-0.04em">Lat</text>
+  <text x="72" y="460" fill="#c8b8e0" font-family="system-ui,sans-serif" font-size="28" font-weight="500">Medical rigour · Mad-lad energy · PyTorch</text>
+  <text x="72" y="540" fill="#7a6b94" font-family="ui-monospace,monospace" font-size="22">Tokenizers · VAE · VQ · DiT · MaskGIT · MAR</text>
+</svg>
