@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from .modules import MAETokViTEncoder, MAETokViTDecoder
 
 logger = logging.getLogger(__name__)
-from medlat.modules.alignments import HOGAlignment, DinoAlignment, ClipAlignment
+from medlat.alignments import HOGAlignment, DinoAlignment, ClipAlignment
 from medlat.registry import register_model
 from medlat.utils import init_from_ckpt
 

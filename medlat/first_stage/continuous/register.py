@@ -5,7 +5,7 @@ from medlat.registry import register_model
 from medlat.first_stage.continuous.vae_models import AutoencoderKL, AutoencoderKLTransformer
 
 __all__ = []
-from medlat.modules.alignments import *
+from medlat.alignments import *
 from medlat.modules.vit_core import GenericViTEncoder, GenericViTDecoder
 
 

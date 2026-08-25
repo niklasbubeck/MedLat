@@ -36,7 +36,7 @@ import torch
 import torch.nn as nn
 
 from medlat.first_stage.continuous.vae_models import AutoencoderKLTransformer
-from medlat.modules.alignments import AlignmentModule
+from medlat.alignments import AlignmentModule
 from medlat.modules.vit_core import GenericViTDecoder, GenericViTEncoder
 from medlat.utils import init_from_ckpt
 

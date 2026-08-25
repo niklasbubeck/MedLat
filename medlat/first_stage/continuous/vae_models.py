@@ -30,7 +30,7 @@ from medlat.first_stage.modules.gaussian_dist import (
     DiagonalGaussianDistribution,
     _DeterministicPosterior,
 )
-from medlat.modules.alignments import AlignmentModule
+from medlat.alignments import AlignmentModule
 from medlat.modules.metrics import MetricLoggerMixin
 from medlat.utils import init_from_ckpt
 

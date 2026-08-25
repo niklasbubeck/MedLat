@@ -7,7 +7,7 @@ __all__ = []
 from einops.layers.torch import Rearrange, Reduce
 from medlat.first_stage.discrete.vq_models import VQModel, VQModelTransformer
 from medlat.first_stage.discrete.quantizer import *
-from medlat.modules.alignments import *
+from medlat.alignments import *
 from medlat.first_stage.token.maetok.modules.vit_models import MAETokViTEncoder, MAETokViTDecoder
 from medlat.modules.vit_core import GenericViTEncoder, GenericViTDecoder
 

@@ -38,7 +38,7 @@ class _StubDecoder(nn.Module):
 # ---------------------------------------------------------------------------
 
 def test_hog_alignment_constructs():
-    from medlat.modules.alignments import HOGAlignment
+    from medlat.alignments import HOGAlignment
     decoder = _StubDecoder(embed_dim=64)
     align = HOGAlignment(decoder=decoder, codebook_embed_dim=32)
     assert align is not None
@@ -46,7 +46,7 @@ def test_hog_alignment_constructs():
 
 def test_hog_alignment_ensure_projection_dim_preserves_requires_grad():
     """Rebuilding to_pixel must keep the same requires_grad state."""
-    from medlat.modules.alignments import HOGAlignment
+    from medlat.alignments import HOGAlignment
     decoder = _StubDecoder(embed_dim=64)
     align = HOGAlignment(decoder=decoder, codebook_embed_dim=32)
 
@@ -65,7 +65,7 @@ def test_hog_alignment_ensure_projection_dim_preserves_requires_grad():
 
 def test_hog_alignment_ensure_projection_dim_trainable_preserved():
     """Rebuilt projection head stays trainable when it was trainable before."""
-    from medlat.modules.alignments import HOGAlignment
+    from medlat.alignments import HOGAlignment
     decoder = _StubDecoder(embed_dim=64)
     align = HOGAlignment(decoder=decoder, codebook_embed_dim=32)
 
@@ -82,7 +82,7 @@ def test_hog_alignment_ensure_projection_dim_trainable_preserved():
 # ---------------------------------------------------------------------------
 
 def test_infer_grid_hw_perfect_square():
-    from medlat.modules.alignments import HOGAlignment
+    from medlat.alignments import HOGAlignment
     decoder = _StubDecoder()
     align = HOGAlignment(decoder=decoder, codebook_embed_dim=32)
     assert align._infer_grid_hw(256) == (16, 16)
@@ -90,7 +90,7 @@ def test_infer_grid_hw_perfect_square():
 
 
 def test_infer_grid_hw_non_square_raises():
-    from medlat.modules.alignments import HOGAlignment
+    from medlat.alignments import HOGAlignment
     decoder = _StubDecoder()
     align = HOGAlignment(decoder=decoder, codebook_embed_dim=32)
     with pytest.raises(ValueError, match="square grid"):
@@ -103,20 +103,26 @@ def test_infer_grid_hw_non_square_raises():
 
 @requires_timm
 def test_vf_foundation_alignment_constructs():
-    from medlat.modules.alignments import VFFoundationAlignment
-    align = VFFoundationAlignment(latent_channels=4, foundation_type="dinov2")
+    from medlat.alignments import VFFoundationAlignment
+    decoder = _StubDecoder(embed_dim=64)
+    align = VFFoundationAlignment(
+        decoder=decoder, codebook_embed_dim=32, foundation_type="dinov2",
+    )
     assert align is not None
 
 
 @requires_timm
 def test_vf_foundation_alignment_forward_smoke():
     """Smoke test: forward pass returns a scalar loss."""
-    from medlat.modules.alignments import VFFoundationAlignment
-    align = VFFoundationAlignment(latent_channels=4, foundation_type="dinov2")
+    from medlat.alignments import VFFoundationAlignment
+    decoder = _StubDecoder(embed_dim=64)
+    align = VFFoundationAlignment(
+        decoder=decoder, codebook_embed_dim=32, foundation_type="dinov2",
+    )
     align.eval()
 
     x_img = torch.randn(1, 3, 64, 64)
-    x_latent = torch.randn(1, 4, 8, 8)
+    x_latent = torch.randn(1, 64, 32)  # (B, L, codebook_embed_dim)
     with torch.no_grad():
         loss, _ = align(x_latent, input_image=x_img)
     assert loss.ndim == 0, "VF loss should be a scalar"
@@ -129,7 +135,7 @@ def test_vf_foundation_alignment_forward_smoke():
 
 @requires_timm
 def test_dino_alignment_constructs():
-    from medlat.modules.alignments import DinoAlignment
+    from medlat.alignments import DinoAlignment
     decoder = _StubDecoder(embed_dim=64)
     align = DinoAlignment(
         decoder=decoder,

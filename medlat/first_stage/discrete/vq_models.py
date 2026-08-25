@@ -29,7 +29,7 @@ from medlat.first_stage.discrete.modules.ldm_modules import get_conv_layer
 from medlat.first_stage.discrete.quantizer.quantize import (
     unflatten_spatial_to_channel_first,
 )
-from medlat.modules.alignments import AlignmentModule
+from medlat.alignments import AlignmentModule
 from medlat.modules.metrics import MetricLoggerMixin
 from medlat.utils import init_from_ckpt
 

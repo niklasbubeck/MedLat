@@ -9,7 +9,7 @@ from .maetok.maetok import MaskAEModel
 from typing import Optional
 from medlat.first_stage.discrete.vq_models import VQModel
 from medlat.first_stage.discrete.quantizer.quantize import SoftVectorQuantizer
-from medlat.modules.alignments import *
+from medlat.alignments import *
 
 
 @register_model("token.titok.s_128", paper_url="https://arxiv.org/abs/2406.07550")
