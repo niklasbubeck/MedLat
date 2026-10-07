@@ -333,3 +333,145 @@ def test_haste_dit_forward_smoke():
     loss = model._auxiliary_losses["alignment_loss"]
     assert loss.ndim == 0
     assert torch.isfinite(loss)
+
+
+# ---------------------------------------------------------------------------
+# Teacher Registry (Phase 5)
+# ---------------------------------------------------------------------------
+
+def test_teacher_model_abc():
+    """TeacherModel cannot be instantiated directly."""
+    from medlat.alignments.teachers import TeacherModel
+    with pytest.raises(TypeError):
+        TeacherModel()
+
+
+@requires_timm
+def test_timm_teacher_constructs():
+    from medlat.alignments.teachers import TimmTeacher
+    teacher = TimmTeacher("vit_small_patch14_dinov2.lvd142m", img_size=56)
+    assert teacher.embed_dim > 0
+    assert teacher.supports_attention
+    assert teacher.num_blocks > 0
+    assert teacher.input_transform is not None
+
+
+@requires_timm
+def test_timm_teacher_extract_features():
+    from medlat.alignments.teachers import TimmTeacher
+    teacher = TimmTeacher("vit_small_patch14_dinov2.lvd142m", img_size=56)
+    x = torch.randn(2, 3, 56, 56)
+    with torch.no_grad():
+        features = teacher.extract_features(x)
+    assert features.ndim == 3
+    assert features.shape[0] == 2
+    assert features.shape[2] == teacher.embed_dim
+
+
+@requires_timm
+def test_timm_teacher_always_eval():
+    """Teacher must stay in eval mode even after .train()."""
+    from medlat.alignments.teachers import TimmTeacher
+    teacher = TimmTeacher("vit_small_patch14_dinov2.lvd142m", img_size=56)
+    teacher.train(True)
+    assert not teacher.training
+
+
+@requires_timm
+def test_timm_teacher_attn_hook():
+    from medlat.alignments.teachers import TimmTeacher
+    teacher = TimmTeacher("vit_small_patch14_dinov2.lvd142m", img_size=56)
+    hook = teacher.make_attn_hook(0)
+    module = teacher.get_qkv_module(0)
+    handle = module.register_forward_hook(hook)
+
+    x = torch.randn(2, 3, 56, 56)
+    with torch.no_grad():
+        teacher.extract_features(x)
+
+    assert hook.logits is not None
+    assert hook.logits.ndim == 4
+    hook.clear()
+    assert hook.logits is None
+    handle.remove()
+
+
+@requires_timm
+def test_create_teacher_factory():
+    from medlat.alignments import create_teacher
+    teacher = create_teacher("timm", "vit_small_patch14_dinov2.lvd142m", img_size=56)
+    assert teacher.embed_dim > 0
+
+    with pytest.raises(ValueError, match="Unknown teacher source"):
+        create_teacher("nonexistent", "model")
+
+
+def test_custom_teacher():
+    from medlat.alignments.teachers import CustomTeacher
+
+    backbone = nn.Linear(64, 128)
+
+    def extract(model, x):
+        B = x.shape[0]
+        flat = x.reshape(B, -1)[:, :64]
+        return model(flat).unsqueeze(1)  # (B, 1, 128)
+
+    teacher = CustomTeacher(backbone, embed_dim=128, extract_fn=extract)
+    assert teacher.embed_dim == 128
+    assert not teacher.supports_attention
+    assert teacher.input_transform is None
+
+    x = torch.randn(2, 3, 8, 8)
+    with torch.no_grad():
+        features = teacher.extract_features(x)
+    assert features.shape == (2, 1, 128)
+    assert not backbone.weight.requires_grad
+
+
+@requires_timm
+def test_repa_with_explicit_teacher():
+    """REPAAlignment accepts a pre-built teacher."""
+    from medlat.alignments import REPAAlignment
+    from medlat.alignments.teachers import TimmTeacher
+
+    teacher = TimmTeacher("vit_small_patch14_dinov2.lvd142m", img_size=56)
+    align = REPAAlignment(hidden_dim=384, teacher=teacher)
+    assert align.teacher is teacher
+
+    x_latent = torch.randn(2, 16, 384)
+    x_img = torch.randn(2, 3, 56, 56)
+    align.eval()
+    with torch.no_grad():
+        loss, pred = align(x_latent, input_image=x_img)
+    assert loss.ndim == 0
+    assert pred.shape[0] == 2
+
+
+@requires_timm
+def test_dino_with_explicit_teacher():
+    """DinoAlignment accepts a pre-built teacher."""
+    from medlat.alignments import DinoAlignment
+    from medlat.alignments.teachers import TimmTeacher
+
+    teacher = TimmTeacher("vit_small_patch14_dinov2.lvd142m", img_size=56)
+    decoder = _StubDecoder(embed_dim=64)
+    align = DinoAlignment(
+        decoder=decoder, codebook_embed_dim=32,
+        teacher=teacher, img_size=56,
+    )
+    assert align.teacher is teacher
+
+
+@requires_timm
+def test_haste_with_explicit_teacher():
+    """HASTEAlignment accepts a pre-built teacher for attention distillation."""
+    from medlat.alignments import HASTEAlignment
+    from medlat.alignments.teachers import TimmTeacher
+
+    teacher = TimmTeacher("vit_small_patch14_dinov2.lvd142m", img_size=56)
+    align = HASTEAlignment(
+        hidden_dim=384, teacher=teacher,
+        num_attn_distill=2, teacher_attn_start=8,
+    )
+    assert align.teacher is teacher
+    assert len(align._attn_hooks) == 2
