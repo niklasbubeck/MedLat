@@ -7,6 +7,7 @@ from .modules import MAETokViTEncoder, MAETokViTDecoder
 
 logger = logging.getLogger(__name__)
 from medlat.alignments import HOGAlignment, DinoAlignment, ClipAlignment
+from medlat.alignments.teachers import TimmTeacher
 from medlat.registry import register_model
 from medlat.utils import init_from_ckpt
 
@@ -209,12 +210,11 @@ class MaskAEModel(nn.Module):
                 base_img_size=self.base_img_size,
                 use_movq=use_movq_dino,
             )
+            dino_teacher = TimmTeacher(self.repa_model, img_size=self.img_size, patch_size=self.repa_patch_size)
             self.aux_dino_decoder = DinoAlignment(
                 decoder=aux_dino_decoder_model,
                 codebook_embed_dim=self.codebook_embed_dim,
-                img_size=self.img_size,
-                repa_model_name=self.repa_model,
-                repa_patch_size=self.repa_patch_size,
+                teacher=dino_teacher,
             )
         
         self.aux_clip_decoder = None
@@ -242,12 +242,11 @@ class MaskAEModel(nn.Module):
                 base_img_size=self.base_img_size,
                 use_movq=use_movq_clip,
             )
+            clip_teacher = TimmTeacher('vit_so400m_patch14_siglip_gap_224', img_size=self.img_size, patch_size=self.repa_patch_size)
             self.aux_clip_decoder = ClipAlignment(
                 decoder=aux_clip_decoder_model,
                 codebook_embed_dim=self.codebook_embed_dim,
-                img_size=self.img_size,
-                clip_model_name='vit_so400m_patch14_siglip_gap_224',
-                clip_patch_size=self.repa_patch_size,
+                teacher=clip_teacher,
             )
             
         # self.aux_biomed_clip_decoder = self.aux_biomed_clip_dec

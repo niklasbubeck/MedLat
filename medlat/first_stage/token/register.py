@@ -278,7 +278,8 @@ def SoftVQ_S_T32_D32(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, img_size=img_size)
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", img_size=img_size, patch_size=14)
+    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, teacher=teacher)
     return VQModel(encoder=encoder, decoder=decoder, quantizer=quantizer, alignment=alignment, pre_post_layer="linear", **kwargs)
 
 @register_model("token.softvq.s_t64_d32", paper_url="https://arxiv.org/abs/2412.10958")
@@ -349,7 +350,8 @@ def SoftVQ_S_T64_D32(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, img_size=img_size)
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", img_size=img_size, patch_size=14)
+    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, teacher=teacher)
     return VQModel(encoder=encoder, decoder=decoder, quantizer=quantizer, alignment=alignment, pre_post_layer="linear", **kwargs)
 
 
@@ -421,7 +423,8 @@ def SoftVQ_B_T32_D32(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, img_size=img_size)
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", img_size=img_size, patch_size=14)
+    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, teacher=teacher)
     return VQModel(encoder=encoder, decoder=decoder, quantizer=quantizer, alignment=alignment, pre_post_layer="linear", **kwargs)
 
 @register_model("token.softvq.b_t64_d32", paper_url="https://arxiv.org/abs/2412.10958")
@@ -492,7 +495,8 @@ def SoftVQ_B_T64_D32(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, img_size=img_size)
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", img_size=img_size, patch_size=14)
+    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, teacher=teacher)
     return VQModel(encoder=encoder, decoder=decoder, quantizer=quantizer, alignment=alignment, pre_post_layer="linear", **kwargs)
 
 @register_model("token.softvq.bl_t32_d32", paper_url="https://arxiv.org/abs/2412.10958")
@@ -563,7 +567,8 @@ def SoftVQ_BL_T32_D32(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, img_size=img_size)
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", img_size=img_size, patch_size=14)
+    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, teacher=teacher)
     return VQModel(encoder=encoder, decoder=decoder, quantizer=quantizer, alignment=alignment, pre_post_layer="linear", **kwargs)
 
 @register_model("token.softvq.bl_t64_d32", paper_url="https://arxiv.org/abs/2412.10958")
@@ -634,7 +639,8 @@ def SoftVQ_BL_T64_D32(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, img_size=img_size)
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", img_size=img_size, patch_size=14)
+    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, teacher=teacher)
     return VQModel(encoder=encoder, decoder=decoder, quantizer=quantizer, alignment=alignment, **kwargs)
 
 @register_model("token.softvq.l_t32_d32", paper_url="https://arxiv.org/abs/2412.10958")
@@ -705,7 +711,8 @@ def SoftVQ_L_T32_D32(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, img_size=img_size)
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", img_size=img_size, patch_size=14)
+    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, teacher=teacher)
     return VQModel(encoder=encoder, decoder=decoder, quantizer=quantizer, alignment=alignment, pre_post_layer="linear", **kwargs)
 
 @register_model("token.softvq.l_t64_d32", paper_url="https://arxiv.org/abs/2412.10958")
@@ -778,6 +785,7 @@ def SoftVQ_L_T64_D32(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, img_size=img_size)
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", img_size=img_size, patch_size=14)
+    alignment = DinoAlignment(decoder=aux_dino_decoder, codebook_embed_dim=e_dim, teacher=teacher)
     return VQModel(encoder=encoder, decoder=decoder, quantizer=quantizer, alignment=alignment, pre_post_layer="linear", **kwargs)
 

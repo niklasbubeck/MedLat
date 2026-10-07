@@ -593,12 +593,14 @@ class FlowMatchingScheduler(BaseScheduler):
         """Compute flow-matching training loss for one batch.
         Returns a dict with keys 'loss' and 'mse'.
         """
-        return self._transport.training_losses(
+        terms = self._transport.training_losses(
             model, x_start,
             model_kwargs=model_kwargs,
             t=t,
             noise=noise,
         )
+        self._collect_auxiliary_losses(model, terms)
+        return terms
 
     def p_sample_loop(
         self,

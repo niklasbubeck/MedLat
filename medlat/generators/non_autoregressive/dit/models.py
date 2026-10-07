@@ -78,6 +78,10 @@ class DiT(nn.Module):
         dataset_num=None,
         learn_sigma=True,
         dims=2,
+        generator_alignment=None,
+        alignment_layer=8,
+        dispersive_loss=None,
+        dispersive_layer=None,
     ):
         super().__init__()
         self.dims = dims
@@ -118,6 +122,13 @@ class DiT(nn.Module):
             for _ in range(depth)
         ])
         self.final_layer = FinalLayer(hidden_size, self.patch_size, self.out_channels, cond_dim=self.cond_dim)
+
+        self.generator_alignment = generator_alignment
+        self.alignment_layer = alignment_layer
+        self.dispersive_loss = dispersive_loss
+        self.dispersive_layer = dispersive_layer
+        self._auxiliary_losses = {}
+
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -156,7 +167,8 @@ class DiT(nn.Module):
         nn.init.constant_(self.final_layer.linear.weight, 0)
         nn.init.constant_(self.final_layer.linear.bias, 0)
 
-    def forward(self, x, t, y, dataset_id=None):
+    def forward(self, x, t, y, dataset_id=None, input_image=None):
+        x_noisy = x
         x = self.x_embedder(x) + self.pos_embed
         t_emb = self.t_embedder(t)
         y_emb = self.y_embedder(y, self.training)
@@ -169,10 +181,41 @@ class DiT(nn.Module):
 
         c = torch.cat(c_list, dim=1)  # (N, cond_dim)
 
-        for block in self.blocks:
+        self._auxiliary_losses = {}
+        for i, block in enumerate(self.blocks):
             x = block(x, c)
+            if (self.generator_alignment is not None
+                    and (i + 1) == self.alignment_layer
+                    and input_image is not None):
+                align_loss, _ = self.generator_alignment(
+                    x, input_image=input_image,
+                    noisy_latent=x_noisy, timestep=t,
+                    class_labels=y, dataset_id=dataset_id,
+                )
+                self._auxiliary_losses["alignment_loss"] = align_loss
+            if (self.dispersive_loss is not None
+                    and (i + 1) == self.dispersive_layer
+                    and self.training):
+                self._auxiliary_losses["dispersive_loss"] = self.dispersive_loss(x)
+
         x = self.final_layer(x, c)
         x = self.to_pixel(x)
+        return x
+
+    def forward_to_layer(self, x, t, y, layer, dataset_id=None):
+        """Run forward up to ``layer`` and return the hidden states."""
+        x = self.x_embedder(x) + self.pos_embed
+        t_emb = self.t_embedder(t)
+        y_emb = self.y_embedder(y, self.training)
+        c_list = [t_emb, y_emb]
+        if self.use_dataset_conditioning and dataset_id is not None:
+            ds_emb = self.dataset_embedder(dataset_id, self.training)
+            c_list.append(ds_emb)
+        c = torch.cat(c_list, dim=1)
+        for i, block in enumerate(self.blocks):
+            x = block(x, c)
+            if (i + 1) == layer:
+                return x
         return x
 
     def forward_with_cfg(self, x, t, y, cfg_scale, dataset_id=None, cfg_dataset=True):

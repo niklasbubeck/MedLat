@@ -40,3 +40,17 @@ class BaseScheduler(ABC):
     ) -> torch.Tensor:
         """Generate a batch of samples from noise. Returns tensor of shape `shape`."""
         ...
+
+    def _collect_auxiliary_losses(
+        self, model: Any, terms: Dict[str, torch.Tensor],
+    ) -> None:
+        """Collect auxiliary losses (alignment, etc.) from the model after forward.
+
+        If the model exposes ``get_auxiliary_losses()``, each returned entry
+        is added to ``terms`` and summed into ``terms['loss']``.  Models
+        without the method are silently skipped.
+        """
+        if hasattr(model, "get_auxiliary_losses"):
+            for key, value in model.get_auxiliary_losses().items():
+                terms[key] = value
+                terms["loss"] = terms["loss"] + value

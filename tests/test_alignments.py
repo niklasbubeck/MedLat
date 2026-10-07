@@ -152,3 +152,184 @@ def test_dino_alignment_constructs():
         img_size=224,
     )
     assert align is not None
+
+
+# ---------------------------------------------------------------------------
+# SRAAlignment
+# ---------------------------------------------------------------------------
+
+def test_sra_alignment_constructs():
+    from medlat.alignments import SRAAlignment
+    align = SRAAlignment(hidden_dim=768, teacher_layer=8)
+    assert align is not None
+    assert align._ema_model is None
+    assert align.teacher_layer == 8
+    assert align.delta_max == 0.2
+
+
+def test_sra_alignment_asserts_no_ema():
+    """Forward without set_ema_model must raise AssertionError."""
+    from medlat.alignments import SRAAlignment
+    align = SRAAlignment(hidden_dim=64, teacher_layer=4)
+    quant = torch.randn(1, 16, 64)
+    img = torch.randn(1, 3, 32, 32)
+    with pytest.raises(AssertionError, match="EMA model"):
+        align(quant, input_image=img,
+              noisy_latent=torch.randn(1, 4, 8, 8),
+              timestep=torch.tensor([0.5]),
+              class_labels=torch.tensor([0]))
+
+
+def test_sra_alignment_ema_not_in_state_dict():
+    """EMA model must NOT appear in SRA's state_dict."""
+    from medlat.alignments import SRAAlignment
+    align = SRAAlignment(hidden_dim=64, teacher_layer=4)
+    ema = nn.Linear(64, 64)
+    align.set_ema_model(ema)
+    for key in align.state_dict():
+        assert "ema" not in key.lower(), f"EMA leaked into state_dict: {key}"
+
+
+# ---------------------------------------------------------------------------
+# DispersiveLoss
+# ---------------------------------------------------------------------------
+
+def test_dispersive_loss_basic():
+    from medlat.alignments import DispersiveLoss
+    disp = DispersiveLoss(tau=0.5)
+    z = torch.randn(4, 16, 64)
+    loss = disp(z)
+    assert loss.ndim == 0
+    assert torch.isfinite(loss)
+
+
+def test_dispersive_loss_collapsed_representations():
+    """Identical representations should produce a lower (more negative) loss
+    than diverse ones — the loss penalises collapse."""
+    from medlat.alignments import DispersiveLoss
+    disp = DispersiveLoss(tau=0.5)
+    diverse = torch.randn(8, 16, 64)
+    collapsed = diverse[0:1].expand(8, -1, -1).clone()
+    collapsed += torch.randn_like(collapsed) * 1e-4
+    loss_diverse = disp(diverse)
+    loss_collapsed = disp(collapsed)
+    assert loss_collapsed > loss_diverse, (
+        "Collapsed representations should have higher dispersive loss "
+        "(near 0) — minimising the loss pushes toward diversity"
+    )
+
+
+@requires_timm
+def test_dispersive_loss_dit_forward():
+    """Dispersive loss fires during training and is absent during eval."""
+    from medlat.generators.non_autoregressive.dit.models import DiT
+    from medlat.alignments import DispersiveLoss
+
+    model = DiT(
+        img_size=64, vae_stride=16, patch_size=2,
+        in_channels=4, hidden_size=384, depth=12,
+        num_heads=6, num_classes=10,
+        dispersive_loss=DispersiveLoss(), dispersive_layer=3,
+    )
+    x = torch.randn(4, 4, 4, 4)
+    t = torch.rand(4)
+    y = torch.randint(0, 10, (4,))
+
+    model.train()
+    _ = model(x, t, y)
+    assert "dispersive_loss" in model._auxiliary_losses
+
+    model.eval()
+    with torch.no_grad():
+        _ = model(x, t, y)
+    assert "dispersive_loss" not in model._auxiliary_losses
+
+
+@requires_timm
+def test_sra_alignment_forward_smoke():
+    """Full forward pass with a real DiT as EMA model."""
+    from medlat.generators.non_autoregressive.dit.models import DiT
+    from medlat.alignments import SRAAlignment
+
+    sra = SRAAlignment(hidden_dim=384, teacher_layer=8)
+    model = DiT(
+        img_size=64, vae_stride=16, patch_size=2,
+        in_channels=4, hidden_size=384, depth=12,
+        num_heads=6, num_classes=10,
+        generator_alignment=sra, alignment_layer=4,
+    )
+    import copy
+    ema = copy.deepcopy(model)
+    ema.requires_grad_(False)
+    ema.eval()
+    sra.set_ema_model(ema)
+
+    x = torch.randn(2, 4, 4, 4)
+    t = torch.rand(2)
+    y = torch.randint(0, 10, (2,))
+    img = torch.randn(2, 3, 64, 64)
+
+    model.eval()
+    with torch.no_grad():
+        out = model(x, t, y, input_image=img)
+
+    assert out.shape == (2, 8, 4, 4)
+    assert "alignment_loss" in model._auxiliary_losses
+    loss = model._auxiliary_losses["alignment_loss"]
+    assert loss.ndim == 0
+    assert loss.item() >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# HASTEAlignment + HASTEDiT
+# ---------------------------------------------------------------------------
+
+@requires_timm
+def test_haste_dit_block_returns_attn():
+    """HASTEDiTBlock returns attention logits when asked."""
+    from medlat.generators.non_autoregressive.dit.haste import HASTEDiTBlock
+    block = HASTEDiTBlock(hidden_size=384, num_heads=6, cond_dim=768)
+    x = torch.randn(2, 16, 384)
+    c = torch.randn(2, 768)
+
+    out_normal = block(x, c)
+    assert isinstance(out_normal, torch.Tensor)
+
+    out_attn, logits = block(x, c, return_attn=True)
+    assert out_attn.shape == x.shape
+    assert logits.shape == (2, 6, 16, 16)
+
+
+@requires_timm
+def test_haste_dit_forward_smoke():
+    """HASTEDiT with HASTEAlignment produces alignment loss."""
+    from medlat.generators.non_autoregressive.dit.haste import HASTEDiT
+    from medlat.alignments import HASTEAlignment
+
+    haste = HASTEAlignment(
+        hidden_dim=384, img_size=56,
+        teacher_model_name="vit_small_patch14_dinov2.lvd142m",
+        teacher_patch_size=14,
+        num_attn_distill=2, teacher_attn_start=8,
+    )
+    model = HASTEDiT(
+        img_size=64, vae_stride=16, patch_size=2,
+        in_channels=4, hidden_size=384, depth=12,
+        num_heads=6, num_classes=10,
+        generator_alignment=haste, alignment_layer=4,
+        attn_distill_layers=[2, 3],
+    )
+    x = torch.randn(2, 4, 4, 4)
+    t = torch.rand(2)
+    y = torch.randint(0, 10, (2,))
+    img = torch.randn(2, 3, 64, 64)
+
+    model.eval()
+    with torch.no_grad():
+        out = model(x, t, y, input_image=img)
+
+    assert out.shape == (2, 8, 4, 4)
+    assert "alignment_loss" in model._auxiliary_losses
+    loss = model._auxiliary_losses["alignment_loss"]
+    assert loss.ndim == 0
+    assert torch.isfinite(loss)

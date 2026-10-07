@@ -30,9 +30,11 @@ class GaussianDiffusionScheduler(BaseScheduler):
         """Compute training loss for one batch.
         Returns a dict with keys 'loss' and optionally 'mse' / 'vb'.
         """
-        return self._diffusion.training_losses(
+        terms = self._diffusion.training_losses(
             model, x_start, t=t, model_kwargs=model_kwargs, noise=noise
         )
+        self._collect_auxiliary_losses(model, terms)
+        return terms
 
     def p_sample_loop(
         self,

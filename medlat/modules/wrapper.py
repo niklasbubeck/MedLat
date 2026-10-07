@@ -396,8 +396,21 @@ class GenWrapper(nn.Module):
                 return self.fcn_decode(z / self.scale_factor)
 
     # ---------------------------------------------------------------------
-    # Forward
+    # Auxiliary losses
     # ---------------------------------------------------------------------
+    def get_auxiliary_losses(self) -> dict:
+        """Collect and consume auxiliary losses stored by the generator.
+
+        Generator modules (e.g. DiT with a GeneratorAlignment) write to
+        ``self._auxiliary_losses`` during ``forward()``.  This method
+        returns and clears that dict so each loss is counted exactly once.
+        """
+        losses = {}
+        if hasattr(self.generator, "_auxiliary_losses"):
+            losses.update(self.generator._auxiliary_losses)
+            self.generator._auxiliary_losses = {}
+        return losses
+
     # ---------------------------------------------------------------------
     # Repr
     # ---------------------------------------------------------------------

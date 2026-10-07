@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional
+import math
 
 import torch
 import torch.nn as nn
@@ -106,3 +107,36 @@ class CosineMarginLoss(AlignmentLoss):
     def forward(self, pred, target, mask=None):
         cos_sim = F.cosine_similarity(pred, target, dim=-1)
         return F.relu(1.0 - self.margin - cos_sim).mean()
+
+
+# ====================================================================== #
+# Representation regularizers (not AlignmentLoss subclasses)
+# ====================================================================== #
+
+
+class DispersiveLoss(nn.Module):
+    """Dispersive loss — encourages diverse representations across a batch.
+
+    Penalises representation collapse by pushing batch samples apart in
+    hidden-state space.  Operates on pairwise squared-L2 distances
+    between flattened hidden states — no teacher or target needed.
+
+    ``L_disp = log mean_ij exp( -||z_i - z_j||^2 / tau )``
+
+    Reference: "Diffuse and Disperse", arXiv:2506.09027.
+    """
+
+    def __init__(self, tau: float = 0.5):
+        super().__init__()
+        self.tau = tau
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """Compute dispersive loss over a batch of hidden states.
+
+        Args:
+            z: ``(B, L, D)`` token sequences or ``(B, D)`` vectors.
+        """
+        z_flat = z.reshape(z.shape[0], -1)
+        dists = torch.pdist(z_flat, p=2).pow(2)
+        scaled = -dists / self.tau
+        return torch.logsumexp(scaled, dim=0) - math.log(max(scaled.shape[0], 1))

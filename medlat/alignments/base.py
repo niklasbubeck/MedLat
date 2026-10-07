@@ -56,12 +56,16 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
         self.loss_weights = [w for _, w in losses]
 
     @abstractmethod
-    def compute_target(self, x: torch.Tensor) -> torch.Tensor:
+    def compute_target(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         """Return target features from the (already-transformed) input image.
 
         The result may be ``(B, L, D)`` token sequences or ``(B, C, H, W)``
         feature maps — the base class normalises both to ``(B, L, D)``
         before loss computation.
+
+        Extra ``**kwargs`` are forwarded from :meth:`forward` — subclasses
+        that need additional context (e.g. noisy latents for SRA) can
+        consume them here.
         """
         ...
 
@@ -83,6 +87,7 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
         quant: torch.Tensor,
         input_image: Optional[torch.Tensor] = None,
         mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         if input_image is None:
             raise ValueError("AlignmentModule requires input_image to compute target features")
@@ -93,7 +98,7 @@ class AlignmentModule(MetricLoggerMixin, ABC, nn.Module):
                 if self.input_transform is not None
                 else input_image
             )
-            target = self.compute_target(target_input)
+            target = self.compute_target(target_input, **kwargs)
 
         self.ensure_projection_dim(self._feature_dim(target))
 
@@ -252,6 +257,13 @@ class GeneratorAlignment(AlignmentModule):
 
     Adds an MLP projection head that maps generator hidden states
     to the teacher feature space.
+
+    Default architecture matches REPA: 3-layer MLP with SiLU
+    activations and a configurable bottleneck dimension ``proj_dim``.
+
+    ::
+
+        hidden_dim → proj_dim (SiLU) → proj_dim (SiLU) → target_dim
     """
 
     def __init__(
@@ -262,7 +274,8 @@ class GeneratorAlignment(AlignmentModule):
         input_transform: Optional[nn.Module] = None,
         spatial_mode: str = "bilinear",
         losses: Optional[List[Tuple[AlignmentLoss, float]]] = None,
-        proj_depth: int = 2,
+        proj_dim: int = 2048,
+        proj_depth: int = 3,
     ):
         super().__init__(
             name=name,
@@ -271,10 +284,10 @@ class GeneratorAlignment(AlignmentModule):
             losses=losses,
         )
 
-        layers = []
-        for _ in range(proj_depth - 1):
-            layers.extend([nn.Linear(hidden_dim, hidden_dim), nn.GELU()])
-        layers.append(nn.Linear(hidden_dim, target_dim))
+        layers = [nn.Linear(hidden_dim, proj_dim), nn.SiLU()]
+        for _ in range(proj_depth - 2):
+            layers.extend([nn.Linear(proj_dim, proj_dim), nn.SiLU()])
+        layers.append(nn.Linear(proj_dim, target_dim))
         self.projection = nn.Sequential(*layers)
 
     def decode_projection(self, quant: torch.Tensor) -> torch.Tensor:

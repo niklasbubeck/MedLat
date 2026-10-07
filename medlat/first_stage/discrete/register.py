@@ -2467,6 +2467,55 @@ def SoftVQ_f8_d16_e16384(
 def SoftVQ_f8_d32_e16384(**kwargs):
     return SoftVQ_f8_d16_e16384(z_channels=32, e_dim=32, **kwargs)
 
+
+@register_model(f"continuous.soft_vq.f16_d8_e16384", paper_url="https://arxiv.org/pdf/2412.10958v1")
+def SoftVQ_f16_d8_e16384(
+    # --- encoder/decoder config ---
+        img_size=256,
+        dims=2,
+        double_z=False,
+        z_channels=8,
+        in_channels=3,
+        out_ch=3,
+        ch=128,
+        ch_mult=[1, 1, 2, 2, 4],
+        num_res_blocks=2,
+        attn_resolutions=[16],
+        dropout=0.0,
+        # --- quantizer config ---
+        n_e=16384,
+        e_dim=8,
+        entropy_loss_weight=0.01,
+        entropy_loss_temperature=0.01,
+        entropy_gamma=1.0,
+        tau=0.07,
+        use_norm=True,
+        **kwargs
+    ):
+    encoder = Encoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    decoder = Decoder(
+        img_size=img_size, dims=dims, double_z=double_z,
+        z_channels=z_channels, in_channels=in_channels, out_ch=out_ch,
+        ch=ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
+        attn_resolutions=attn_resolutions, dropout=dropout,
+    )
+    quantizer = SoftVectorQuantizer(
+        n_e=n_e,
+        e_dim=e_dim,
+        entropy_loss_weight=entropy_loss_weight,
+        entropy_loss_temperature=entropy_loss_temperature,
+        entropy_gamma=entropy_gamma,
+        tau=tau,
+        use_norm=use_norm,
+    )
+    return VQModel(encoder, decoder, quantizer, **kwargs)
+
+
 @register_model(f"continuous.soft_vq.f8_d16_e16384_dinov2")
 def SoftVQ_f8_d16_e16384_dinov2(
     # --- encoder/decoder config ---
@@ -2526,7 +2575,8 @@ def SoftVQ_f8_d16_e16384_dinov2(
         tau=tau,
         use_norm=use_norm,
     )
-    alignment = DinoAlignment(decoder=IdentityDecoder(z_channels), codebook_embed_dim=z_channels, losses=[(DistmatMarginLoss(margin=0.25), 1.0), (CosineMarginLoss(margin=0.5), 1.0)])
+    teacher = TimmTeacher("vit_large_patch14_dinov2.lvd142m", patch_size=14)
+    alignment = DinoAlignment(decoder=IdentityDecoder(z_channels), codebook_embed_dim=z_channels, teacher=teacher, losses=[(DistmatMarginLoss(margin=0.25), 1.0), (CosineMarginLoss(margin=0.5), 1.0)])
     return VQModel(encoder, decoder, quantizer, alignment=alignment, **kwargs)
 
 @register_model(f"continuous.soft_vq.f8_d32_e16384_dinov2")
