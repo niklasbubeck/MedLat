@@ -66,6 +66,9 @@ class HuggingFaceTeacher(TeacherModel):
         # Pretraining resolution. Running at another img_size needs the
         # positional embedding interpolated (e.g. MedSigLIP is 448-native).
         self._native_size = getattr(cfg, 'image_size', None)
+        import inspect
+        self._takes_interpolate_flag = (
+            'interpolate_pos_encoding' in inspect.signature(self.model.forward).parameters)
         self._num_heads = cfg.num_attention_heads
 
         try:
@@ -98,7 +101,10 @@ class HuggingFaceTeacher(TeacherModel):
             x = F.interpolate(x, size=(self._img_size, self._img_size),
                               mode='bilinear', align_corners=False)
         kwargs = {}
-        if self._native_size is not None and self._img_size != self._native_size:
+        if (self._native_size is not None and self._img_size != self._native_size
+                and self._takes_interpolate_flag):
+            # SigLIP-style models need the flag; Dinov2 (rad_dino) interpolates
+            # unconditionally and rejects it.
             kwargs['interpolate_pos_encoding'] = True
         outputs = self.model(pixel_values=x, **kwargs)
         features = outputs.last_hidden_state

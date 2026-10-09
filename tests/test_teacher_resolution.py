@@ -70,3 +70,15 @@ def test_hf_teacher_interpolates_pos_encoding_below_native_size(tmp_path):
     # native size still takes the plain path
     t64 = HuggingFaceTeacher(path, img_size=64)
     assert t64.extract_features(torch.rand(1, 3, 64, 64)).shape == (1, 16, 32)
+
+
+def test_hf_teacher_dinov2_off_native_size(tmp_path):
+    # Dinov2 interpolates on its own and rejects interpolate_pos_encoding;
+    # rad_dino's config says 518 while REAMed runs it at 224.
+    from transformers import Dinov2Config, Dinov2Model
+    from medlat.alignments.teachers.hf_teacher import HuggingFaceTeacher
+    path = tmp_path / "dinov2"
+    Dinov2Model(Dinov2Config(image_size=64, patch_size=16, hidden_size=32, num_hidden_layers=2,
+                             num_attention_heads=2, intermediate_size=64)).save_pretrained(path)
+    t = HuggingFaceTeacher(str(path), img_size=32)
+    assert t.extract_features(torch.rand(2, 3, 32, 32)).shape == (2, 4, 32)
