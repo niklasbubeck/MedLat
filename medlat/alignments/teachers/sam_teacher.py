@@ -5,6 +5,7 @@ not the standard ``(B, L, D)`` patch tokens.  These subclasses handle
 the reshape.
 """
 
+import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import TeacherModel
@@ -72,6 +73,29 @@ class MedSAMTeacher(TeacherModel):
         self.neck = sam.shared_image_embedding if hasattr(sam, 'shared_image_embedding') else None
         self.vision_encoder.requires_grad_(False)
         self._img_size = img_size
+        native = self.vision_encoder.config.image_size
+        if img_size != native:
+            self._resize_for(img_size, native)
+
+    def _resize_for(self, img_size, native):
+        """Run the 1024-native encoder at ``img_size``.
+
+        HF's SAM rejects other input sizes and adds a fixed (1, 64, 64, C)
+        absolute positional embedding. Resize that grid bicubically to the new
+        patch grid and relax the size check; the relative position tables of the
+        attention blocks are already interpolated by HF's ``get_rel_pos``.
+        """
+        enc = self.vision_encoder
+        patch = enc.config.patch_size
+        if img_size % patch:
+            raise ValueError(f"img_size {img_size} is not a multiple of the patch size {patch}")
+        grid = img_size // patch
+        enc.patch_embed.image_size = (img_size, img_size)
+        if enc.pos_embed is not None:
+            pos = enc.pos_embed.data.permute(0, 3, 1, 2)  # (1, C, 64, 64)
+            pos = F.interpolate(pos, size=(grid, grid), mode='bicubic', align_corners=False)
+            enc.pos_embed = nn.Parameter(pos.permute(0, 2, 3, 1).contiguous(),
+                                         requires_grad=False)
 
     @property
     def embed_dim(self):

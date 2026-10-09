@@ -63,6 +63,9 @@ class HuggingFaceTeacher(TeacherModel):
         if hasattr(cfg, 'vision_config'):
             cfg = cfg.vision_config
         self._embed_dim = cfg.hidden_size
+        # Pretraining resolution. Running at another img_size needs the
+        # positional embedding interpolated (e.g. MedSigLIP is 448-native).
+        self._native_size = getattr(cfg, 'image_size', None)
         self._num_heads = cfg.num_attention_heads
 
         try:
@@ -94,7 +97,10 @@ class HuggingFaceTeacher(TeacherModel):
         if x.shape[-2] != self._img_size or x.shape[-1] != self._img_size:
             x = F.interpolate(x, size=(self._img_size, self._img_size),
                               mode='bilinear', align_corners=False)
-        outputs = self.model(pixel_values=x)
+        kwargs = {}
+        if self._native_size is not None and self._img_size != self._native_size:
+            kwargs['interpolate_pos_encoding'] = True
+        outputs = self.model(pixel_values=x, **kwargs)
         features = outputs.last_hidden_state
         p = self.num_prefix_tokens
         return features[:, p:]
